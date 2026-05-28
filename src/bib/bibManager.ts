@@ -446,7 +446,14 @@ export class BibManager {
           );
           if (list?.length) {
             bib.push(...list);
-            group.lastUpdate = Date.now();
+            // Only advance lastUpdate when we fetched fresh from Zotero.
+            // Loading from the cache file must not move lastUpdate forward,
+            // or the subsequent incremental refresh will query for items
+            // modified "after now" and permanently miss anything not already
+            // in the cache.
+            if (!fromCache) {
+              group.lastUpdate = Date.now();
+            }
           }
         }
       } catch (e) {
@@ -493,7 +500,6 @@ export class BibManager {
     const { settings, cacheDir } = this.plugin;
     if (!settings.zoteroGroups?.length) return;
 
-    const bib: PartialCSLEntry[] = [];
     const modifiedEntries: Map<string, PartialCSLEntry> = new Map();
 
     for (const group of settings.zoteroGroups) {
@@ -514,7 +520,6 @@ export class BibManager {
 
         if (!res) continue;
         if (res.list?.length) {
-          bib.push(...res.list);
           group.lastUpdate = Date.now();
         }
 
