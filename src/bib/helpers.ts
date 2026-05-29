@@ -1,9 +1,11 @@
-import { execa } from 'execa';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
-import download from 'download';
 import { request } from 'http';
+
+const execFileAsync = promisify(execFile);
 import { CSLList, PartialCSLEntry } from './types';
 
 export const DEFAULT_ZOTERO_PORT = '23119';
@@ -61,18 +63,17 @@ export async function bibToCSL(
 
   const args = [bibPath, '-t', 'csljson', '--quiet'];
 
-  let res;
+  let res: { stdout: string; stderr: string };
   try {
-    res = await execa(pathToPandoc, args);
+    res = await execFileAsync(pathToPandoc, args, { maxBuffer: 50 * 1024 * 1024 });
   } catch (e) {
-    const stderr = (e as any)?.stderr || (e as any)?.shortMessage || '';
+    const stderr = (e as any)?.stderr || '';
     if (/Unknown output format csljson/.test(stderr)) {
       throw new Error(
         `Pandoc at '${pathToPandoc}' does not support CSL JSON output. ` +
           'Please install Pandoc 2.11 or newer, then update the Pandoc path in this plugin settings if needed.'
       );
     }
-
     throw e;
   }
 
