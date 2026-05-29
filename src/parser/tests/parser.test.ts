@@ -226,6 +226,42 @@ const segmentFixtures: Record<string, Segment[][]> = {
         { from: 76, to: 77, val: ']', type: SegmentType.bracket },
       ],
     ],
+  // Semicolon-in-suffix: ';' with no following '@' is suffix text, not separator
+  '[@item1 see Smith; no key follows]': [
+    [
+      { from: 0, to: 1, val: '[', type: SegmentType.bracket },
+      { from: 1, to: 2, val: '@', type: SegmentType.at },
+      { from: 2, to: 7, val: 'item1', type: SegmentType.key },
+      { from: 7, to: 33, val: ' see Smith; no key follows', type: SegmentType.suffix },
+      { from: 33, to: 34, val: ']', type: SegmentType.bracket },
+    ],
+  ],
+  // ';' followed by '@' is still a separator
+  '[@item1; @item2]': [
+    [
+      { from: 0, to: 1, val: '[', type: SegmentType.bracket },
+      { from: 1, to: 2, val: '@', type: SegmentType.at },
+      { from: 2, to: 7, val: 'item1', type: SegmentType.key },
+      { from: 7, to: 8, val: ';', type: SegmentType.separator },
+      { from: 8, to: 9, val: ' ', type: SegmentType.prefix },
+      { from: 9, to: 10, val: '@', type: SegmentType.at },
+      { from: 10, to: 15, val: 'item2', type: SegmentType.key },
+      { from: 15, to: 16, val: ']', type: SegmentType.bracket },
+    ],
+  ],
+  // ';' followed eventually by '@' (not immediately) is still a separator
+  '[@item1; see also @item2]': [
+    [
+      { from: 0, to: 1, val: '[', type: SegmentType.bracket },
+      { from: 1, to: 2, val: '@', type: SegmentType.at },
+      { from: 2, to: 7, val: 'item1', type: SegmentType.key },
+      { from: 7, to: 8, val: ';', type: SegmentType.separator },
+      { from: 8, to: 18, val: ' see also ', type: SegmentType.prefix },
+      { from: 18, to: 19, val: '@', type: SegmentType.at },
+      { from: 19, to: 24, val: 'item2', type: SegmentType.key },
+      { from: 24, to: 25, val: ']', type: SegmentType.bracket },
+    ],
+  ],
   'With explicit locator [@smith{ii, A, D-Z}, with a suffix].': [
     [
       { from: 22, to: 23, val: '[', type: SegmentType.bracket },

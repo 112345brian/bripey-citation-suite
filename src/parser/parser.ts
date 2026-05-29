@@ -38,6 +38,10 @@ interface State {
   seekingLocator: boolean;
   encounteredKey: boolean;
   shouldCancelSeek: boolean;
+  // Index of the last ';' that was appended to a suffix (not emitted as a
+  // separator). Used to suppress the "prev===';' starts a prefix" heuristic
+  // when the semicolon was not actually a citation separator.
+  semicolonAppendedAt: number;
   segment: Segment[];
   currentSegment: Segment;
   bracketDepth: number;
@@ -57,6 +61,7 @@ function newState(): State {
     seekingLocator: false,
     encounteredKey: false,
     shouldCancelSeek: false,
+    semicolonAppendedAt: -1,
     segment: [] as Segment[],
     currentSegment: null as Segment,
   };
@@ -654,6 +659,7 @@ export function getCitationSegments(str: string, ignoreLinks: boolean = false) {
         if (hasFollowingKey) {
           state.shouldCancelSeek = false;
           endCurrent(i);
+          state.inKey = false;
           state.currentSegment = newCurrent(i, c, SegmentType.separator);
         } else if (state.inKey) {
           // ';' immediately after the key with no following citation: start a suffix
@@ -662,8 +668,10 @@ export function getCitationSegments(str: string, ignoreLinks: boolean = false) {
           state.inSuffix = true;
           state.seekingLocator = false;
           state.currentSegment = newCurrent(i, c, SegmentType.suffix);
+          state.semicolonAppendedAt = i;
         } else {
           state.currentSegment.val += c;
+          state.semicolonAppendedAt = i;
         }
         continue;
       }
@@ -716,7 +724,7 @@ export function getCitationSegments(str: string, ignoreLinks: boolean = false) {
       }
 
       if (seekState) {
-        if (prev === ';') {
+        if (prev === ';' && state.semicolonAppendedAt !== i - 1) {
           endCurrent(i);
           state.currentSegment = newCurrent(i, c, SegmentType.prefix);
           state.inSuffix = false;
@@ -728,7 +736,7 @@ export function getCitationSegments(str: string, ignoreLinks: boolean = false) {
           continue;
         }
       } else {
-        if (prev === '[' || prev === ';') {
+        if (prev === '[' || (prev === ';' && state.semicolonAppendedAt !== i - 1)) {
           endCurrent(i);
           state.currentSegment = newCurrent(i, c, SegmentType.prefix);
           continue;
