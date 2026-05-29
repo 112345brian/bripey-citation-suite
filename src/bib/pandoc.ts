@@ -1,9 +1,17 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { Platform } from 'obsidian';
 import { PartialCSLEntry } from './types';
 
-const execFileAsync = promisify(execFile);
+async function execFileAsync(
+  file: string,
+  args: string[],
+  options?: { maxBuffer?: number }
+): Promise<{ stdout: string; stderr: string }> {
+  const [{ execFile }, { promisify }] = await Promise.all([
+    import('child_process'),
+    import('util'),
+  ]);
+  return promisify(execFile)(file, args, options);
+}
 
 /**
  * Convert a bibliography file to CSL-JSON using Pandoc.
@@ -43,7 +51,8 @@ export async function bibToCSLViaPandoc(
  */
 export async function findPandoc(): Promise<string | null> {
   if (!Platform.isDesktop) return null;
-  const cmd = process.platform === 'win32' ? 'where' : 'which';
+  const platform = globalThis.process?.platform;
+  const cmd = platform === 'win32' ? 'where' : 'which';
   try {
     const { stdout } = await execFileAsync(cmd, ['pandoc']);
     return stdout.trim().split('\n')[0] ?? null;
