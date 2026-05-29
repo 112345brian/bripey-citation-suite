@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   renderCitationsReadingMode: true,
   renderLinkCitations: true,
   showCitationDecorations: true,
+  mobileClickAction: 'show',
 };
 
 export interface ZoteroGroup {
@@ -52,6 +53,8 @@ export interface ReferenceListSettings {
   renderLinkCitations?: boolean;
 
   literatureNoteFolder?: string;
+  /** Action to take when a citation is tapped on mobile (no hover available). */
+  mobileClickAction?: 'show' | 'copy' | 'link';
   pullFromZotero?: boolean;
   zoteroPort?: string;
   zoteroGroups: ZoteroGroup[];
@@ -495,5 +498,24 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             this.plugin.saveSettings();
           });
       });
+
+    new Setting(containerEl)
+      .setName(t('Mobile tap action'))
+      .setDesc(
+        t(
+          'What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.'
+        )
+      )
+      .addDropdown((dd) =>
+        dd
+          .addOption('show', t('Show citation info'))
+          .addOption('copy', t('Copy citation to clipboard'))
+          .addOption('link', t('Open link (Zotero → PDF → URL)'))
+          .setValue(this.plugin.settings.mobileClickAction ?? 'show')
+          .onChange((value) => {
+            this.plugin.settings.mobileClickAction = value as 'show' | 'copy' | 'link';
+            this.plugin.saveSettings();
+          })
+      );
   }
 }

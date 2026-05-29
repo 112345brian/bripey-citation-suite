@@ -1,6 +1,7 @@
-import { TFile } from 'obsidian';
+import { Platform, TFile, setIcon } from 'obsidian';
 
 import { t } from './lang/helpers';
+import { copyElToClipboard } from './helpers';
 import ReferenceList from './main';
 import clip from 'text-clipper';
 
@@ -143,9 +144,125 @@ export class TooltipManager {
     this.boundScroll = null;
   }
 
+  // ── Mobile citation card ─────────────────────────────────────────────────
+
+  /**
+   * Show a bottom-sheet citation card on mobile.
+   * Reuses the same HTML that the desktop tooltip uses but displays it as a
+   * full-width panel with a dismiss backdrop.
+   */
+  showMobileCard(el: HTMLElement) {
+    const file = app.vault.getAbstractFileByPath(el.dataset.source ?? '');
+    if (!(file instanceof TFile)) return;
+
+    const keys = (el.dataset.citekey ?? '').split('|').filter(Boolean);
+    if (!keys.length) return;
+
+    let content: DocumentFragment | HTMLElement | null = null;
+    for (const key of keys) {
+      const html = this.plugin.bibManager.getBibForCiteKey(file, key) as HTMLElement | null;
+      if (html) {
+        if (!content) content = createFragment();
+        content.append(html);
+      }
+    }
+
+    const doc = ((el as any).doc ?? el.ownerDocument ?? document) as Document;
+    const backdrop = doc.body.createDiv({ cls: 'pwc-mobile-backdrop' });
+
+    // Tap outside the card → dismiss.
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) backdrop.remove();
+    });
+
+    const card = backdrop.createDiv({ cls: 'pwc-mobile-card pwc-reference-list' });
+
+    // Header with close button.
+    const header = card.createDiv({ cls: 'pwc-mobile-card-header' });
+    const closeBtn = header.createDiv({ cls: 'clickable-icon' });
+    setIcon(closeBtn, 'x');
+    closeBtn.setAttribute('aria-label', t('Close'));
+    closeBtn.onClickEvent(() => backdrop.remove());
+
+    if (content) {
+      card.append(content);
+    } else {
+      card.createEl('em', { text: t('No citation found for ') + (el.dataset.citekey ?? '') });
+    }
+
+    // Allow links/buttons inside the card to close it after being tapped.
+    card.addEventListener('click', (evt) => {
+      const target = evt.target as HTMLElement;
+      if (target.tagName === 'A' || target.closest('.clickable-icon')) {
+        backdrop.remove();
+      }
+    });
+  }
+
+  /**
+   * Dispatch the appropriate mobile tap action for the given citation element.
+   * Called on `click` events on mobile — replaces the hover-tooltip flow.
+   */
+  handleMobileTap(el: HTMLElement) {
+    const action = this.plugin.settings.mobileClickAction ?? 'show';
+    const file = app.vault.getAbstractFileByPath(el.dataset.source ?? '');
+    if (!(file instanceof TFile)) return;
+
+    const keys = (el.dataset.citekey ?? '').split('|').filter(Boolean);
+    if (!keys.length) return;
+
+    if (action === 'show') {
+      this.showMobileCard(el);
+      return;
+    }
+
+    if (action === 'copy') {
+      // Collect formatted citation HTML and copy as rich text + markdown.
+      const entries: HTMLElement[] = [];
+      for (const key of keys) {
+        const html = this.plugin.bibManager.getBibForCiteKey(file, key) as HTMLElement | null;
+        if (html) entries.push(html);
+      }
+      if (entries.length) {
+        const wrapper = createDiv();
+        entries.forEach((e) => wrapper.append(e));
+        copyElToClipboard(wrapper).catch(console.error);
+      }
+      return;
+    }
+
+    if (action === 'link') {
+      for (const key of keys) {
+        // Priority: Zotero select → PDF file → URL/DOI
+        const zLink = this.plugin.bibManager.zCitekeyToLinks.get(key);
+        if (zLink) { activeWindow.open(zLink, '_blank'); return; }
+
+        const pdfLinks = this.plugin.bibManager.zCitekeyToPDFLinks.get(key);
+        if (pdfLinks?.length) {
+          activeWindow.open(`file://${encodeURI(pdfLinks[0])}`, '_blank');
+          return;
+        }
+
+        const entry = this.plugin.bibManager.bibCache.get(key) as Record<string, unknown> | undefined;
+        const url = entry?.URL as string | undefined;
+        const doi = entry?.DOI as string | undefined;
+        if (url) { activeWindow.open(url, '_blank'); return; }
+        if (doi) { activeWindow.open(`https://doi.org/${doi}`, '_blank'); return; }
+      }
+      // Nothing to open — fall back to showing the card.
+      this.showMobileCard(el);
+    }
+  }
+
   previewDBTimer = 0;
   previewDBTimerClose = 0;
   bindPreviewTooltipHandler(el: HTMLElement) {
+    if (Platform.isMobile) {
+      // On mobile there's no hover — use a tap/click action instead.
+      el.addEventListener('click', () => this.handleMobileTap(el));
+      return;
+    }
+
     el.addEventListener('pointerover', (evt) => {
       evt.view.clearTimeout(this.previewDBTimer);
       evt.view.clearTimeout(this.previewDBTimerClose);
@@ -204,7 +321,22 @@ export class TooltipManager {
           activeKey = null;
         }
       },
+      // Mobile: handle tap-to-action on non-link citation spans.
+      // Link citations (is-link) already have their own click → openLinkText handler.
+      click: (evt: MouseEvent) => {
+        if (!Platform.isMobile) return;
+        const target = evt.targetNode;
+        if (
+          target.instanceOf(HTMLElement) &&
+          target.dataset.citekey &&
+          !target.hasClass('is-link')
+        ) {
+          evt.preventDefault();
+          this.handleMobileTap(target);
+        }
+      },
       pointerover: (evt: PointerEvent) => {
+        if (Platform.isMobile) return; // handled by click
         const target = evt.targetNode;
         if (target.instanceOf(HTMLElement)) {
           const citekey = target.dataset.citekey;

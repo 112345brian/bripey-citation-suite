@@ -1,3 +1,15 @@
+## 2.0.42
+
+- **BibTeX parser: recovery passes.** After normal field extraction, three cleanup passes now run on every entry:
+  - **Year from citekey** — if no `date`/`year` field is present, a 4-digit year is extracted from the citekey (Zotero's `smith_2020_title` format makes this reliable).
+  - **Title fallback** — if no title field is found, the citekey is humanised (hyphens/underscores → spaces) and used as the title so the entry is at least identifiable.
+  - **DOI normalization** — `https://doi.org/10.xxx` prefixes are stripped to bare DOIs, fixing link generation in some CSL styles.
+- **Mobile: tap-to-action for citations.** On mobile, hover tooltips don't exist. A new "Mobile tap action" setting (under Tooltip settings) controls what happens when you tap a citation:
+  - **Show citation info** (default) — opens a bottom-sheet card with the full formatted reference, action buttons, and an × close button. Tapping outside the card also dismisses it.
+  - **Copy citation to clipboard** — copies the formatted reference as rich text + markdown.
+  - **Open link** — follows the best available link in order: Zotero select → PDF file → URL/DOI. Falls back to showing the card if nothing is available.
+- **Larger sidebar text.** Reference list entries now use `--font-ui-medium` (matches Obsidian's outline sidebar size) instead of the fixed 14 px. Overridable via Style Settings as before.
+
 ## 2.0.41
 
 - **Critical fix: all .bib authors missing on mobile (and desktop without Zotero).** `@retorquere/bibtex-parser` v9 changed its output format: author/editor/translator arrays now live in `entry.fields.author` etc. as `{firstName, lastName}` objects — there is no longer an `entry.creators` property. The parser was always returning `entry.creators = undefined`, so every entry loaded from a `.bib` file had no author, rendering as "T (2014)" (title initial) instead of "Goldsmith and Crawford (2014)". On desktop this was hidden because Zotero provided the correct data. The fix reads creator roles from `entry.fields[role]` and falls back to `entry.creators[role]` for forwards/backwards compatibility with both parser layouts.
