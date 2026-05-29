@@ -103,6 +103,14 @@ export default {
   // src/tooltip.ts
   'No citation found for ': 'No citation found for ',
 
+  'Mobile tap action': 'Mobile tap action',
+  'What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.':
+    'What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.',
+  'Show citation info': 'Show citation info',
+  'Copy citation to clipboard': 'Copy citation to clipboard',
+  'Open link (Zotero → PDF → URL)': 'Open link (Zotero → PDF → URL)',
+  'Close': 'Close',
+
   // src/main.ts
   'Show reference list': 'Show reference list',
 

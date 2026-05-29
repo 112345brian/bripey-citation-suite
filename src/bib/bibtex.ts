@@ -100,6 +100,28 @@ function parseIssuedDate(
   return undefined;
 }
 
+/**
+ * Last-resort year extraction from a citekey.
+ * Matches the first 4-digit sequence in the range 1000–2099 that is
+ * surrounded by non-digits (or string boundaries).  Zotero's default
+ * citekey format (`smith_2020_title`, `smith-jones-2020`) makes this
+ * reliable in practice.
+ */
+function yearFromKey(key: string): number | undefined {
+  const m = key.match(/(?:^|[^0-9])(1[0-9]{3}|20[0-9]{2})(?:[^0-9]|$)/);
+  if (!m) return undefined;
+  const year = parseInt(m[1], 10);
+  return Number.isFinite(year) && year > 0 ? year : undefined;
+}
+
+/**
+ * Convert a raw DOI value to a bare DOI string.
+ * Zotero sometimes stores the full URL in the DOI field.
+ */
+function normalizeDOI(raw: string): string {
+  return raw.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').trim();
+}
+
 function getExt(filePath: string): string {
   const base = filePath.split('/').pop() ?? filePath;
   const dot = base.lastIndexOf('.');
@@ -238,8 +260,9 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
       if (place) csl['publisher-place'] = place;
 
       // ── Identifiers (trim whitespace that .bib files occasionally embed) ──
-      const doi = fieldStr(f.doi);
-      if (doi) csl.DOI = doi;
+      const rawDoi = fieldStr(f.doi);
+      // Normalise: Zotero sometimes stores "https://doi.org/10.xxx" in the DOI field.
+      if (rawDoi) csl.DOI = normalizeDOI(rawDoi);
 
       const url = fieldStr(f.url);
       if (url) csl.URL = url;
@@ -267,6 +290,22 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
 
       const note = fieldStr(f.note);
       if (note) csl.note = note;
+
+      // ── Recovery: fill in missing fields from what we can derive ──────────
+      // These run after all normal extraction so they never overwrite real data.
+
+      // If no date was found in any field, try extracting a year from the citekey.
+      // Zotero's citekey format (`smith_2020_title`) makes this reliable.
+      if (!csl.issued) {
+        const year = yearFromKey(key);
+        if (year) csl.issued = { 'date-parts': [[year]] };
+      }
+
+      // If no title was found, use the citekey humanised as a readable fallback
+      // so the entry is at least identifiable in a reference list.
+      if (!csl.title) {
+        csl.title = key.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+      }
 
       results.push(csl as unknown as PartialCSLEntry);
     } catch (err) {
