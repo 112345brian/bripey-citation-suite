@@ -59,7 +59,7 @@ settings:
     format: hex
     default-light: '#2e3338'
     default-dark: '#dcddde'
-  - 
+  -
     id: pwc-citation-extra-color
     title: 'Citation "extra" color'
     description: 'Changes the color text within a citation, eg. "pp. 22-24"'
@@ -67,17 +67,64 @@ settings:
     format: hex
     default-light: '#2e3338'
     default-dark: '#dcddde'
+  -
+    id: pwc-citation-color-link
+    title: Link citation color
+    description: 'Color for [[@citekey]] citations that are also Obsidian wikilinks'
+    type: variable-themed-color
+    format: hex
+    default-light: '#086ddd'
+    default-dark: '#578dde'
+  -
+    id: pwc-citation-underline-color-link
+    title: Link citation underline color
+    type: variable-themed-color
+    format: hex
+    default-light: '#086ddd'
+    default-dark: '#578dde'
+  -
+    id: pwc-citation-underline-style
+    title: Citation underline style
+    type: variable-select
+    default: dotted
+    options:
+      - label: Dotted
+        value: dotted
+      - label: Dashed
+        value: dashed
+      - label: Solid
+        value: solid
+      - label: None
+        value: none
+  -
+    id: pwc-citation-underline-style-link
+    title: Link citation underline style
+    type: variable-select
+    default: solid
+    options:
+      - label: Solid
+        value: solid
+      - label: Dotted
+        value: dotted
+      - label: Dashed
+        value: dashed
+      - label: None
+        value: none
 */
 
 body {
   --pwc-font-size: 14px;
   --pwc-tooltip-font-size: 14px;
+  --pwc-citation-color: var(--text-accent);
+  --pwc-citation-color-missing: var(--text-normal);
+  --pwc-citation-color-link: var(--link-color);
   --pwc-citation-underline-color: var(--text-accent);
   --pwc-citation-underline-color-missing: transparent;
+  --pwc-citation-underline-color-link: var(--link-color);
+  --pwc-citation-underline-style: dotted;
+  --pwc-citation-underline-style-link: solid;
   --pwc-citation-extra-color: var(--text-normal);
-  --pwc-citation-formatting-color: var(--text-normal);
-  --pwc-citation-color: var(--text-normal);
-  --pwc-citation-color-missing: var(--text-normal);
+  --pwc-citation-formatting-color: var(--text-muted);
 }
 
 .pwc-reference-list {
@@ -245,57 +292,81 @@ body {
   padding: 0;
 }
 
-.pwc-tooltips .cm-hmd-barelink {
+.pwc-decorations .cm-hmd-barelink {
   text-decoration: none;
 }
 
-.pwc-tooltips
+.pwc-decorations
   :not(a, .cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-resolved {
+  > :is(.pandoc-citation, .at).is-resolved:not(.is-link) {
   color: var(--pwc-citation-color);
 }
 
-.pwc-tooltips
+.pwc-decorations
   :not(.cm-formatting-link)
   > .cm-pandoc-citation-formatting:not(.at) {
   color: var(--pwc-citation-formatting-color);
 }
 
-.pwc-tooltips
+.pwc-decorations
   :not(.cm-hmd-internal-link, .cm-link-alias)
   > .cm-pandoc-citation-extra {
   color: var(--pwc-citation-extra-color);
 }
 
-.pwc-tooltips :not(.cm-link-alias) > :is(.pandoc-citation, .at).is-resolved {
-  text-decoration: underline;
-  text-decoration-style: dotted;
+.pwc-decorations
+  :not(.cm-link-alias)
+  > :is(.pandoc-citation, .at).is-resolved:not(.is-link) {
+  text-decoration-line: underline;
+  text-decoration-style: var(--pwc-citation-underline-style);
   text-decoration-thickness: 2px;
   text-decoration-color: var(--pwc-citation-underline-color);
 }
 
-.pwc-tooltips
+.pwc-decorations
   :not(.cm-hmd-internal-link, .cm-link-alias)
   > :is(.pandoc-citation, .at).is-unresolved {
+  color: var(--pwc-citation-color-missing);
   text-decoration-color: var(--pwc-citation-underline-color-missing);
   opacity: 1;
 }
 
-.pwc-tooltips
-  :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-unresolved {
-  color: var(--pwc-citation-color-missing);
-}
-
-.pwc-tooltips
+.pwc-decorations
   :not(a, .cm-hmd-internal-link, .cm-link-alias)
   > :is(.pandoc-citation, .at).is-link {
-  color: var(--link-color);
+  color: var(--pwc-citation-color-link);
   cursor: var(--cursor-link);
+}
+
+.pwc-decorations
+  :not(.cm-link-alias)
+  > :is(.pandoc-citation, .at).is-link {
+  text-decoration-line: underline;
+  text-decoration-style: var(--pwc-citation-underline-style-link);
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--pwc-citation-underline-color-link);
 }
 
 .pandoc-citation > * {
   pointer-events: none;
+}
+
+.pwc-decoration-preview {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-2) var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.pwc-decoration-preview .pwc-preview-sep {
+  color: var(--text-faint);
+  padding: 0 var(--size-4-2);
 }
 
 .pwc-success {

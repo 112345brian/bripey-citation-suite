@@ -1,11 +1,6 @@
-## 2.0.32
+## 2.0.33
 
-- **Race condition fix:** a run counter now cancels stale `processReferences` calls so switching notes quickly never renders a previous file's references into the current view.
-- **Click-to-jump:** clicking a reference entry in the sidebar now scrolls the editor to that citation instead of copying. Right-click gives a context menu with "Copy citekey" and "Copy reference" options.
-- **Unresolved citations badge:** the sidebar now shows a red count badge for citekeys that couldn't be resolved.
-- **Keyboard navigation in SearchSelect:** arrow keys move through the dropdown, Enter confirms, Escape closes. Full ARIA combobox attributes added.
-- **Custom CSL URL preserved in dropdown:** when a non-preset style URL is configured, the dropdown now shows it as a selectable label instead of going blank.
-- **Parallel `.bib` loading:** multiple `.bib` files are now parsed in a single pass (concatenated) rather than sequentially, reducing load time on large multi-file setups.
-- **Zotero pagination fix:** corrected an off-by-one in the item-fetch loop that could skip the last page when the response was exactly `limit` items.
-- **Renderer rerender fallbacks:** added fallbacks for vaults where `previewMode.renderer` is absent, preventing silent no-ops on re-render.
-- **Type fixes:** `@retorquere/bibtex-parser` and Electron `clipboard` ambient declarations consolidated into `src/ambient.d.ts`; eliminates TS errors from missing types.
+- **Citation decoration system:** resolved citekeys are now colored in your theme's accent color; `[[@wikilink]]` citations use the link color with a solid underline to distinguish them from plain `[@citations]`. Brackets and punctuation dim to `--text-muted` so the citekey stands out.
+- **New "Citation decoration" setting:** toggle decorations independently of tooltips, with an in-settings live preview showing all three citation states (resolved, wikilink, unresolved). Colors and underline styles are fully customizable via the Style Settings plugin.
+- **Style Settings entries added:** link citation color, link citation underline color, and separate underline-style selects (dotted/dashed/solid/none) for regular vs. link citations.
+- **Settings crash fix:** opening the settings tab no longer crashes when Zotero's Better BibTeX endpoint is unavailable — the Zotero panel now gracefully shows "Cannot connect" instead of storing `null` into component state and throwing on `.find`/`.map`.

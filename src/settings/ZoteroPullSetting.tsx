@@ -48,6 +48,10 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
         const groups = isNative
           ? await getZUserGroupsNative(port)
           : await getZUserGroups(port);
+        if (!groups) {
+          setConnected(false);
+          return;
+        }
         validateGroups(plugin, groups);
         setPossibleGroups(groups);
         setConnected(true);
