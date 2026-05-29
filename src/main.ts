@@ -12,7 +12,6 @@ import {
   normalizePath,
   setIcon,
 } from 'obsidian';
-import which from 'which';
 
 import {
   citeKeyCacheField,
@@ -29,8 +28,8 @@ import {
 } from './settings';
 import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
-import { PromiseCapability, fixPath, getVaultRoot } from './helpers';
-import path from 'path';
+import { PromiseCapability } from './helpers';
+import { isAbsolutePath } from './bib/helpers';
 import { BibManager, getScopedSettings } from './bib/bibManager';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
 
@@ -40,11 +39,28 @@ function isBibliographyFile(file: TAbstractFile): file is TFile {
   return file instanceof TFile && bibliographyExtensions.has(file.extension);
 }
 
-function getFileRelativePath(sourceFile: TFile, targetPath: string) {
-  const sourceDir = path.posix.dirname(sourceFile.path);
-  const relativePath = path.posix.relative(sourceDir, targetPath);
+// Minimal posix-style path helpers for vault paths (always forward-slash).
+function posixDirname(p: string): string {
+  const idx = p.lastIndexOf('/');
+  return idx <= 0 ? '' : p.slice(0, idx);
+}
 
-  return relativePath || path.posix.basename(targetPath);
+function posixBasename(p: string): string {
+  return p.split('/').pop() ?? p;
+}
+
+function posixRelative(from: string, to: string): string {
+  const a = from.split('/').filter(Boolean);
+  const b = to.split('/').filter(Boolean);
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return [...a.slice(i).map(() => '..'), ...b.slice(i)].join('/') || '.';
+}
+
+function getFileRelativePath(sourceFile: TFile, targetPath: string) {
+  const sourceDir = posixDirname(sourceFile.path);
+  const rel = posixRelative(sourceDir, targetPath);
+  return rel || posixBasename(targetPath);
 }
 
 function bibliographyMatchesPath(
@@ -52,20 +68,20 @@ function bibliographyMatchesPath(
   bibliography: string,
   targetPath: string
 ) {
-  const sourceDir = path.posix.dirname(sourceFile.path);
+  const sourceDir = posixDirname(sourceFile.path);
   const normalizedBibliography = normalizePath(bibliography);
-  const noteRelativePath = normalizePath(
-    path.posix.join(sourceDir, normalizedBibliography)
-  );
+  const noteRelativePath = normalizePath(`${sourceDir}/${normalizedBibliography}`);
   const vaultRelativePath = normalizePath(normalizedBibliography);
 
   if (noteRelativePath === targetPath || vaultRelativePath === targetPath) {
     return true;
   }
 
-  if (path.isAbsolute(bibliography)) {
-    const targetFilePath = path.join(getVaultRoot(), targetPath);
-    return path.normalize(bibliography) === path.normalize(targetFilePath);
+  if (isAbsolutePath(bibliography)) {
+    // Absolute path: compare normalised strings directly.
+    const vaultRoot = (app.vault.adapter as any).getBasePath?.() ?? '';
+    const targetAbs = vaultRoot ? `${vaultRoot}/${targetPath}` : targetPath;
+    return bibliography.replace(/\\/g, '/') === targetAbs.replace(/\\/g, '/');
   }
 
   return false;
@@ -106,7 +122,6 @@ export default class ReferenceList extends Plugin {
   settings: ReferenceListSettings;
   emitter: Events;
   tooltipManager: TooltipManager;
-  cacheDir: string;
   bibManager: BibManager;
   _initPromise: PromiseCapability<void>;
 
@@ -127,7 +142,6 @@ export default class ReferenceList extends Plugin {
       (leaf: WorkspaceLeaf) => new ReferenceListView(leaf, this)
     );
 
-    this.cacheDir = path.join(getVaultRoot(), '.pandoc');
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
     this.initPromise.promise
@@ -151,22 +165,8 @@ export default class ReferenceList extends Plugin {
       editorTooltipHandler(this.tooltipManager),
     ]);
 
-    // No need to block execution
-    fixPath().then(async () => {
-      if (!this.settings.pathToPandoc) {
-        try {
-          // Attempt to find if/where pandoc is located on the user's machine
-          const pathToPandoc = await which('pandoc');
-          this.settings.pathToPandoc = pathToPandoc;
-          this.saveSettings();
-        } catch {
-          // We can ignore any errors here
-        }
-      }
-
-      this.initPromise.resolve();
-      this.app.workspace.trigger('parse-style-settings');
-    });
+    this.initPromise.resolve();
+    this.app.workspace.trigger('parse-style-settings');
 
     this.addCommand({
       id: 'focus-reference-list-view',

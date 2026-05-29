@@ -5,9 +5,10 @@ import { PartialCSLEntry } from './types';
 import Fuse from 'fuse.js';
 import {
   bibToCSL,
-  getBibPath,
   getCSLLocale,
   getCSLStyle,
+  isAbsolutePath,
+  pathBasename,
   DEFAULT_ZOTERO_PORT,
 } from './helpers';
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
@@ -15,20 +16,17 @@ import { SimpleLRU } from './lru';
 import {
   PromiseCapability,
   copyElToClipboard,
-  getVaultRoot,
 } from 'src/helpers';
 import {
   RenderedCitation,
   getCitationSegments,
   getCitations,
 } from 'src/parser/parser';
-import { Keymap, MarkdownView, TFile, setIcon } from 'obsidian';
+import { Keymap, MarkdownView, TFile, normalizePath, setIcon } from 'obsidian';
 import { cite } from 'src/parser/citeproc';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
-import path from 'path';
-import { FSWatcher, watch, existsSync } from 'fs';
 
 const fuseSettings = {
   includeMatches: true,
@@ -77,18 +75,12 @@ function getFrontmatterStringList(value: unknown): string[] {
     .filter((v): v is string => !!v);
 }
 
-function resolveScopedPath(file: TFile, scopedPath: string) {
-  if (path.isAbsolute(scopedPath)) return scopedPath;
-
-  const relativeToNote = path.join(
-    getVaultRoot(),
-    path.dirname(file.path),
-    scopedPath
-  );
-
-  if (existsSync(relativeToNote)) return relativeToNote;
-
-  return scopedPath;
+// Resolve a frontmatter bibliography path relative to the containing note.
+// Returns the path as-is if absolute; otherwise constructs a vault-relative path.
+function resolveScopedPath(file: TFile, scopedPath: string): string {
+  if (isAbsolutePath(scopedPath)) return scopedPath;
+  const noteDir = file.path.split('/').slice(0, -1).join('/');
+  return normalizePath(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
 }
 
 export function getScopedSettings(file: TFile): ScopedSettings | null {
@@ -172,54 +164,46 @@ export class BibManager {
   zCitekeyToLinks: Map<string, string> = new Map();
   zCitekeyToPDFLinks: Map<string, string[]> = new Map();
 
-  watcherCache: Map<string, FSWatcher> = new Map();
+  // Vault-relative paths of bib files to watch for changes.
+  // Absolute-path bib files (outside the vault) are not watched.
+  private watchedBibPaths: Set<string> = new Set();
 
   constructor(plugin: ReferenceList) {
     this.plugin = plugin;
     this.initPromise = new PromiseCapability();
-    this.fileCache = new SimpleLRU({
-      max: 10,
-      dispose: (cache) => {
-        if (cache.settings?.bibliography?.length) {
-          for (const bibPath of cache.settings.bibliography) {
-            this.clearBibliographyWatcher(bibPath);
-          }
+    this.fileCache = new SimpleLRU({ max: 10 });
+
+    // Single vault-level listener replaces per-file FSWatchers.
+    plugin.registerEvent(
+      plugin.app.vault.on('modify', (file) => {
+        const p = normalizePath(file.path);
+        if (!this.watchedBibPaths.has(p)) return;
+
+        const globalBib = normalizePath(
+          plugin.settings.pathToBibliography ?? ''
+        );
+        if (p === globalBib) {
+          this.loadGlobalBibFile().then(() => {
+            this.fileCache.clear();
+            plugin.processReferences();
+          });
+        } else {
+          this.fileCache.clear();
+          plugin.processReferences();
         }
-      },
-    });
+      })
+    );
   }
 
   destroy() {
     this.fileCache.clear();
-
-    for (const watcher of this.watcherCache.values()) {
-      watcher.close();
-    }
-
-    this.watcherCache.clear();
+    this.watchedBibPaths.clear();
     this.langCache.clear();
     this.styleCache.clear();
     this.bibCache.clear();
     this.fuse = null;
     this.engine = null;
     this.plugin = null;
-  }
-
-  clearWatcher(path: string) {
-    if (this.watcherCache.has(path)) {
-      this.watcherCache.get(path).close();
-      this.watcherCache.delete(path);
-    }
-  }
-
-  clearBibliographyWatcher(path: string) {
-    this.clearWatcher(path);
-
-    try {
-      this.clearWatcher(getBibPath(path, getVaultRoot));
-    } catch {
-      // The file may already be gone; clearing the original key is enough then.
-    }
   }
 
   async reinit(clearCache: boolean) {
@@ -301,13 +285,7 @@ export class BibManager {
       try {
         const bib: PartialCSLEntry[] = [];
         for (const bibPath of settings.bibliography) {
-          bib.push(
-            ...(await bibToCSL(
-              bibPath,
-              this.plugin.settings.pathToPandoc,
-              getVaultRoot
-            ))
-          );
+          bib.push(...(await bibToCSL(bibPath)));
         }
         bibCache = new Map();
 
@@ -347,33 +325,14 @@ export class BibManager {
 
     if (!settings.pathToBibliography) return;
     if (!fromCache || this.bibCache.size === 0) {
-      const bib = await bibToCSL(
-        settings.pathToBibliography,
-        settings.pathToPandoc,
-        getVaultRoot
-      );
+      const bib = await bibToCSL(settings.pathToBibliography);
 
       this.bibCache = new Map();
-      const bibPath = getBibPath(settings.pathToBibliography, getVaultRoot);
 
-      if (bibPath && !this.watcherCache.has(bibPath)) {
-        let dbTimer = 0;
-        this.watcherCache.set(
-          bibPath,
-          watch(bibPath, (evt) => {
-            if (evt === 'change') {
-              clearTimeout(dbTimer);
-              dbTimer = activeWindow.setTimeout(() => {
-                this.loadGlobalBibFile().then(() => {
-                  this.fileCache.clear();
-                  this.plugin.processReferences();
-                });
-              }, 100);
-            } else {
-              this.clearWatcher(bibPath);
-            }
-          })
-        );
+      // Register vault-relative paths for change watching.
+      const bibNorm = normalizePath(settings.pathToBibliography);
+      if (!isAbsolutePath(settings.pathToBibliography)) {
+        this.watchedBibPaths.add(bibNorm);
       }
 
       for (const entry of bib) {
@@ -684,12 +643,6 @@ export class BibManager {
 
     const areSettingsEqual = equal(settings, cachedDoc?.settings);
 
-    if (!areSettingsEqual && cachedDoc?.settings?.bibliography?.length) {
-      for (const bibPath of cachedDoc.settings.bibliography) {
-        this.clearBibliographyWatcher(bibPath);
-      }
-    }
-
     const source =
       cachedDoc?.source && areSettingsEqual
         ? cachedDoc.source
@@ -697,30 +650,8 @@ export class BibManager {
 
     if (settings?.bibliography?.length) {
       for (const scopedBibPath of settings.bibliography) {
-        let bibPath: string;
-        try {
-          bibPath = getBibPath(scopedBibPath, getVaultRoot);
-        } catch (e) {
-          console.error(e);
-          continue;
-        }
-
-        if (!this.watcherCache.has(bibPath)) {
-          let dbTimer = 0;
-          this.watcherCache.set(
-            bibPath,
-            watch(bibPath, (evt) => {
-              if (evt === 'change') {
-                clearTimeout(dbTimer);
-                dbTimer = activeWindow.setTimeout(() => {
-                  this.fileCache.delete(file);
-                  this.plugin.processReferences();
-                }, 100);
-              } else {
-                this.clearWatcher(bibPath);
-              }
-            })
-          );
+        if (!isAbsolutePath(scopedBibPath)) {
+          this.watchedBibPaths.add(normalizePath(scopedBibPath));
         }
       }
     }
@@ -944,7 +875,7 @@ export class BibManager {
             zPDFLinks.forEach((link) => {
               div.createDiv('clickable-icon', (div) => {
                 setIcon(div, 'lucide-file-text');
-                div.setAttr('aria-label', path.parse(link).base);
+                div.setAttr('aria-label', pathBasename(link));
                 div.onClickEvent(() => {
                   activeWindow.open(`file://${encodeURI(link)}`, '_blank');
                 });
