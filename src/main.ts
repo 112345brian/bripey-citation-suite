@@ -220,6 +220,10 @@ export default class ReferenceList extends Plugin {
       'pwc-tooltips',
       !!this.settings.showCitekeyTooltips
     );
+    document.body.toggleClass(
+      'pwc-decorations',
+      this.settings.showCitationDecorations ?? true
+    );
 
     this.registerEvent(
       app.metadataCache.on(
@@ -468,6 +472,10 @@ export default class ReferenceList extends Plugin {
     document.body.toggleClass(
       'pwc-tooltips',
       !!this.settings.showCitekeyTooltips
+    );
+    document.body.toggleClass(
+      'pwc-decorations',
+      this.settings.showCitationDecorations ?? true
     );
 
     // Refresh the reference list when settings change

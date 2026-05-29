@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   renderCitations: true,
   renderCitationsReadingMode: true,
   renderLinkCitations: true,
+  showCitationDecorations: true,
 };
 
 export interface ZoteroGroup {
@@ -40,6 +41,7 @@ export interface ReferenceListSettings {
 
   hideLinks?: boolean;
   showCitekeyTooltips?: boolean;
+  showCitationDecorations?: boolean;
   tooltipDelay: number;
   enableCiteKeyCompletion?: boolean;
   renderCitations?: boolean;
@@ -313,6 +315,55 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             this.plugin.saveSettings();
           })
       );
+
+    new Setting(containerEl)
+      .setName(t('Citation decoration'))
+      .setDesc(
+        t(
+          'Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showCitationDecorations ?? true)
+          .onChange((value) => {
+            this.plugin.settings.showCitationDecorations = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    {
+      const row = containerEl.createDiv({ cls: 'setting-item' });
+      const info = row.createDiv({ cls: 'setting-item-info' });
+      info.createDiv({ cls: 'setting-item-name', text: t('Preview') });
+      info.createDiv({
+        cls: 'setting-item-description',
+        text: t('citation · wikilink citation · unresolved'),
+      });
+      const control = row.createDiv({ cls: 'setting-item-control' });
+      const preview = control.createDiv({
+        cls: 'pwc-decorations pwc-decoration-preview',
+      });
+
+      // [@smith2020] — resolved citation
+      preview.createSpan({ cls: 'cm-pandoc-citation-formatting bracket', text: '[' });
+      preview.createSpan({ cls: 'cm-pandoc-citation-formatting at is-resolved', text: '@' });
+      preview.createSpan({ cls: 'cm-pandoc-citation pandoc-citation is-resolved', text: 'smith2020' });
+      preview.createSpan({ cls: 'cm-pandoc-citation-formatting bracket', text: ']' });
+
+      preview.createSpan({ cls: 'pwc-preview-sep', text: '·' });
+
+      // [[@jones2021]] — wikilink citation (shown as rendered widget)
+      preview.createSpan({ cls: 'pandoc-citation is-resolved is-link', text: '(Jones, 2021)' });
+
+      preview.createSpan({ cls: 'pwc-preview-sep', text: '·' });
+
+      // [@unknown] — unresolved
+      preview.createSpan({ cls: 'cm-pandoc-citation-formatting bracket', text: '[' });
+      preview.createSpan({ cls: 'cm-pandoc-citation-formatting at is-unresolved', text: '@' });
+      preview.createSpan({ cls: 'cm-pandoc-citation pandoc-citation is-unresolved', text: 'unknown' });
+      preview.createSpan({ cls: 'cm-pandoc-citation-formatting bracket', text: ']' });
+    }
 
     new Setting(containerEl)
       .setName(t('Show citekey tooltips'))

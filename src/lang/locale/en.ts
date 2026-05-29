@@ -32,6 +32,11 @@ export default {
   'Hide links in references': 'Hide links in references',
   'Replace links with link icons to save space.':
     'Replace links with link icons to save space.',
+  'Citation decoration': 'Citation decoration',
+  'Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.':
+    'Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.',
+  'Preview': 'Preview',
+  'citation · wikilink citation · unresolved': 'citation · wikilink citation · unresolved',
   'Show citekey tooltips': 'Show citekey tooltips',
   'When enabled, hovering over citekeys will open a tooltip containing a formatted citation.':
     'When enabled, hovering over citekeys will open a tooltip containing a formatted citation.',
