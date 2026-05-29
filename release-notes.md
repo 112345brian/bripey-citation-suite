@@ -1,3 +1,8 @@
+## 2.0.44
+
+- **Mobile editor: tap to edit, long-press to show citation.** Previously, tapping a rendered citation in live-preview mode would immediately show the citation card (or copy/link, depending on your setting), making it impossible to tap to place the cursor for editing. Now, a quick tap in the editor behaves normally — the cursor moves to where you tapped. Holding for ~500 ms triggers the configured tap action (show card, copy, or open link). Scrolling or moving your finger during the hold cancels it cleanly without triggering the action.
+- **Reading mode tap action unchanged** — tapping a citation in reading view still immediately shows the citation card (or copy/link), since there's no cursor to place there.
+
 ## 2.0.43
 
 - **Citekey autocomplete: suggestions now appear after the first character.** Previously the suggestion panel only appeared after typing two characters past `@` — so `[@s` showed nothing and `[@sm` was the earliest trigger. Now suggestions appear as soon as you've typed one character (`[@s`).
