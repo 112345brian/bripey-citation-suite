@@ -1,12 +1,138 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-// bibToCSL, getCSLLocale, getCSLStyle, getZUserGroups, and isZoteroRunning all
-// require a live Obsidian runtime (vault.adapter / requestUrl) or a live Zotero
-// instance. They are not exercised in the Jest suite. Run them manually in a
-// dev vault or write integration tests against a live environment.
+jest.mock(
+  'obsidian',
+  () => ({
+    FileSystemAdapter: { readLocalFile: jest.fn() },
+    Keymap: { isModEvent: jest.fn(() => false) },
+    MarkdownView: class MarkdownView {},
+    Platform: { isDesktop: false },
+    TFile: class TFile {},
+    htmlToMarkdown: (html: string) => html.replace(/<[^>]+>/g, ''),
+    normalizePath: (path: string) => path.replace(/\\/g, '/').replace(/\/+/g, '/'),
+    requestUrl: jest.fn(),
+    setIcon: jest.fn(),
+  }),
+  { virtual: true }
+);
 
-import { zoteroItemToCSL } from '../zotero-csl';
+jest.mock('../bibtex', () => ({
+  parseBibFile: jest.fn(),
+}));
+
+import { BibManager } from '../bibManager';
+import { ZOTERO_TYPE_TO_CSL, zoteroItemToCSL } from '../zotero-csl';
 import { SimpleLRU } from '../lru';
+import { locales, styles } from 'src/parser/tests/styles';
+import { PromiseCapability } from 'src/helpers';
+import { PartialCSLEntry } from '../types';
+
+const DEFAULT_STYLE = 'apa';
+
+function makePlugin(overrides: Record<string, any> = {}) {
+  const initPromise = new PromiseCapability<void>();
+  initPromise.resolve();
+
+  return {
+    app: global.app,
+    cacheDir: '.pandoc',
+    initPromise,
+    settings: {
+      cslStyleURL: DEFAULT_STYLE,
+      cslLang: 'en-US',
+      renderLinkCitations: true,
+      pullFromZotero: false,
+      ...overrides,
+    },
+    registerEvent: jest.fn(),
+    saveSettings: jest.fn(),
+    processReferences: jest.fn(),
+    view: { setMessage: jest.fn() },
+  } as any;
+}
+
+function makeManager(entries: PartialCSLEntry[], settings = {}) {
+  const plugin = makePlugin(settings);
+  const manager = new BibManager(plugin);
+  manager.initPromise.resolve();
+
+  for (const entry of entries) {
+    manager.bibCache.set(entry.id, entry);
+  }
+  manager.styleCache.set(DEFAULT_STYLE, styles[DEFAULT_STYLE]);
+  manager.langCache.set('en-US', locales['en-US']);
+
+  return { manager, plugin };
+}
+
+function makeFile(path = 'notes/test.md') {
+  return { path, extension: 'md', basename: 'test', name: 'test.md' } as any;
+}
+
+beforeAll(() => {
+  HTMLElement.prototype.findAll = function (selector: string) {
+    return Array.from(this.querySelectorAll(selector)) as HTMLElement[];
+  };
+  HTMLElement.prototype.hasClass = function (className: string) {
+    return this.classList.contains(className);
+  };
+  HTMLElement.prototype.onClickEvent = function (
+    callback: (this: HTMLElement, ev: MouseEvent) => any,
+    options?: boolean | AddEventListenerOptions
+  ): void {
+    this.addEventListener('click', callback, options);
+  };
+  HTMLElement.prototype.setAttr = function (name: string, value: string) {
+    this.setAttribute(name, value);
+  };
+  HTMLElement.prototype.createDiv = function (options?: any, callback?: (el: HTMLDivElement) => void) {
+    const el = (global as any).createDiv(options, callback);
+    this.append(el);
+    return el;
+  };
+});
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+
+  (global as any).app = {
+    metadataCache: {
+      getFileCache: jest.fn((): null => null),
+      getFirstLinkpathDest: jest.fn((): null => null),
+    },
+    workspace: {
+      getLeavesOfType: jest.fn((): any[] => []),
+      openLinkText: jest.fn(),
+    },
+    vault: {
+      on: jest.fn(() => ({ detach: jest.fn() })),
+      adapter: {
+        exists: jest.fn(async (): Promise<boolean> => false),
+        mkdir: jest.fn(async (): Promise<void> => undefined),
+        read: jest.fn(),
+        write: jest.fn(),
+      },
+      create: jest.fn(),
+    },
+  };
+
+  (global as any).createDiv = (options?: any, callback?: (el: HTMLDivElement) => void) => {
+    const el = document.createElement('div');
+    if (typeof options === 'string') {
+      el.className = options;
+    } else if (options) {
+      if (options.cls) el.className = options.cls;
+      if (options.text) el.textContent = options.text;
+      if (options.attr) {
+        for (const [key, value] of Object.entries(options.attr)) {
+          el.setAttribute(key, String(value));
+        }
+      }
+    }
+    callback?.(el);
+    return el;
+  };
+});
 
 // ─── SimpleLRU ────────────────────────────────────────────────────────────────
 
@@ -95,7 +221,7 @@ describe('zoteroItemToCSL()', () => {
     const result = zoteroItemToCSL(baseItem(), 1);
     expect(result).not.toBeNull();
     expect(result!.id).toBe('smith2020');
-    expect(result!.type).toBe('article-journal');
+    expect((result as any).type).toBe('article-journal');
     expect((result as any).title).toBe('A Test Article');
     expect((result as any)['container-title']).toBe('Journal of Testing');
     expect((result as any).DOI).toBe('10.1234/test');
@@ -114,7 +240,16 @@ describe('zoteroItemToCSL()', () => {
 
   it('falls back to document type for unknown itemType', () => {
     const result = zoteroItemToCSL(baseItem({ itemType: 'unknownType' }), 1);
-    expect(result!.type).toBe('document');
+    expect((result as any).type).toBe('document');
+  });
+
+  it('maps every configured Zotero item type to its CSL type', () => {
+    expect(Object.keys(ZOTERO_TYPE_TO_CSL)).toHaveLength(38);
+
+    for (const [itemType, cslType] of Object.entries(ZOTERO_TYPE_TO_CSL)) {
+      const result = zoteroItemToCSL(baseItem({ itemType }), 1);
+      expect((result as any)?.type).toBe(cslType);
+    }
   });
 
   it('maps editor creator type', () => {
@@ -132,5 +267,118 @@ describe('zoteroItemToCSL()', () => {
     });
     const result = zoteroItemToCSL(item, 1);
     expect((result as any).author).toEqual([{ literal: 'ACME Corp' }]);
+  });
+});
+
+// ─── CSL rendering pipeline ─────────────────────────────────────────────────
+
+describe('BibManager CSL rendering pipeline', () => {
+  const entries: PartialCSLEntry[] = [
+    {
+      id: 'smith2020',
+      type: 'article-journal',
+      title: 'A Test Article',
+      author: [{ family: 'Smith', given: 'Jane' }],
+      issued: { 'date-parts': [[2020]] },
+      'container-title': 'Journal of Testing',
+      volume: '12',
+      issue: '3',
+      page: '100-110',
+    } as any,
+    {
+      id: 'doe2021',
+      type: 'book',
+      title: 'A Test Book',
+      author: [{ family: 'Doe', given: 'John' }],
+      issued: { 'date-parts': [[2021]] },
+      publisher: 'Testing Press',
+    } as any,
+  ];
+
+  it('builds a CSL engine from cached style, locale, and bibliography entries', async () => {
+    const { manager } = makeManager(entries);
+
+    await manager.buildGlobalEngine();
+
+    expect(manager.engine).toBeTruthy();
+    expect(manager.fuse).toBeTruthy();
+  });
+
+  it('renders a bibliography for resolved citekeys and tracks cache metadata', async () => {
+    const { manager } = makeManager(entries);
+    const file = makeFile();
+
+    await manager.buildGlobalEngine();
+    const bib = await manager.getReferenceList(
+      file,
+      'Smith citation [@smith2020] and Doe citation [@doe2021].'
+    );
+
+    expect(bib).toBeInstanceOf(HTMLElement);
+    expect(bib.querySelectorAll('.csl-entry')).toHaveLength(2);
+    expect(bib.textContent).toContain('A Test Article');
+    expect(bib.textContent).toContain('A Test Book');
+
+    const cache = manager.fileCache.get(file)!;
+    expect(cache.keys).toEqual(new Set(['smith2020', 'doe2021']));
+    expect(cache.resolvedKeys).toEqual(new Set(['smith2020', 'doe2021']));
+    expect(cache.unresolvedKeys.size).toBe(0);
+    expect(cache.citations).toHaveLength(2);
+    expect(cache.citeBibMap.get('smith2020')).toContain('A Test Article');
+  });
+
+  it('does not render unresolved citekeys but records them in the file cache', async () => {
+    const { manager } = makeManager(entries);
+    const file = makeFile();
+
+    await manager.buildGlobalEngine();
+    const bib = await manager.getReferenceList(
+      file,
+      'Known [@smith2020] and unknown [@missing2024].'
+    );
+
+    expect(bib.querySelectorAll('.csl-entry')).toHaveLength(1);
+    expect(bib.textContent).toContain('A Test Article');
+    expect(bib.textContent).not.toContain('missing2024');
+
+    const cache = manager.fileCache.get(file)!;
+    expect(cache.resolvedKeys).toEqual(new Set(['smith2020']));
+    expect(cache.unresolvedKeys).toEqual(new Set(['missing2024']));
+  });
+
+  it('returns null and caches citekeys when no CSL engine is available', async () => {
+    const { manager } = makeManager(entries);
+    const file = makeFile();
+
+    const bib = await manager.getReferenceList(file, 'Known [@smith2020].');
+
+    expect(bib).toBeNull();
+
+    const cache = manager.fileCache.get(file)!;
+    expect(cache.keys).toEqual(new Set(['smith2020']));
+    expect(cache.bib).toBeNull();
+    expect(cache.citations).toEqual([]);
+  });
+
+  it('replaces stale scoped bibliography watch paths when frontmatter changes', () => {
+    const { manager } = makeManager(entries);
+    const file = makeFile();
+
+    (manager as any).globalWatchedBibPaths.add('global.bib');
+    (manager as any).updateScopedWatchedBibPaths(file, {
+      bibliography: ['refs/old.bib'],
+    });
+
+    expect((manager as any).watchedBibPaths).toEqual(
+      new Set(['global.bib', 'refs/old.bib'])
+    );
+
+    (manager as any).updateScopedWatchedBibPaths(file, {
+      bibliography: ['refs/new.bib'],
+    });
+
+    expect((manager as any).watchedBibPaths).toEqual(
+      new Set(['global.bib', 'refs/new.bib'])
+    );
   });
 });

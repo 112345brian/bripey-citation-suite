@@ -1,4 +1,4 @@
-# Obsidian Pandoc Reference List (community fork)
+# Bripey Citation Suite
 
 Displays a formatted reference in the sidebar for each pandoc citekey present in the current document.
 
@@ -62,7 +62,7 @@ When a document has more than one citation, a search box appears at the top of t
 
 #### Insert bibliography at cursor
 
-A new command — **Pandoc Reference List: Insert bibliography at cursor** — converts the current document's formatted reference list to markdown and inserts it at the cursor position, replacing any selected text. Entries are separated by blank lines. This is the inline equivalent of LaTeX's `\printbibliography`.
+A new command — **Bripey Citation Suite: Insert bibliography at cursor** — converts the current document's formatted reference list to markdown and inserts it at the cursor position, replacing any selected text. Entries are separated by blank lines. This is the inline equivalent of LaTeX's `\printbibliography`.
 
 Access it via the command palette (`Ctrl/Cmd+P`) or by assigning a hotkey in Obsidian settings.
 
@@ -129,9 +129,9 @@ bibliography:
 Paths are resolved relative to the note file first, then the vault root.
 
 - (Optional) Supply a path or URL to a compatible [CSL style](https://citationstyles.org/)
-- Run **Pandoc Reference List: Show reference list** from the Obsidian command palette to display the References tab in the sidebar
+- Run **Bripey Citation Suite: Show reference list** from the Obsidian command palette to display the References tab in the sidebar
 
 ## Install via BRAT
 
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-2. In BRAT settings, add this repo: `112345brian/obsidian-pandoc-reference-list`
+2. In BRAT settings, add this repo: `112345brian/bripey-citation-suite`

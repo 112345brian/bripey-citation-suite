@@ -4,7 +4,7 @@
 - Build: `npm run build` (production minified) / `npm run dev` (watch mode)
 - Test: `npm test` (Jest + jsdom — Zotero tests require a live Zotero instance)
 - Lint/Format: `npm run lint` / `npm run prettier` / `npm run clean` (both)
-- Run/Dev: copy `main.js`, `manifest.json`, `styles.css` into your vault's `.obsidian/plugins/obsidian-pandoc-reference-list/` after building
+- Run/Dev: copy `main.js`, `manifest.json`, `styles.css` into your vault's `.obsidian/plugins/bripey-citation-suite/` after building
 
 ## Stack
 - TypeScript 5.x (compiled by esbuild, type-checked by `tsc --noemit`)

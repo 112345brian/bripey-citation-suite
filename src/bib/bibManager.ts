@@ -174,6 +174,8 @@ export class BibManager {
 
   // Vault-relative paths of bib files to watch for changes.
   private watchedBibPaths: Set<string> = new Set();
+  private globalWatchedBibPaths: Set<string> = new Set();
+  private scopedWatchedBibPaths: Map<string, Set<string>> = new Map();
 
   constructor(plugin: ReferenceList) {
     this.plugin = plugin;
@@ -207,6 +209,8 @@ export class BibManager {
   destroy() {
     this.fileCache.clear();
     this.watchedBibPaths.clear();
+    this.globalWatchedBibPaths.clear();
+    this.scopedWatchedBibPaths.clear();
     this.bibSourceKeys.clear();
     this.conflictKeys.clear();
     this.langCache.clear();
@@ -347,14 +351,15 @@ export class BibManager {
     try {
       bib = await bibToCSL(settings.pathToBibliography, settings.pathToPandoc);
     } catch (e) {
-      console.error('pandoc-reference-list: failed to load .bib file:', e);
+      console.error('bripey-citation-suite: failed to load .bib file:', e);
       return;
     }
 
     // Register for change watching (vault-relative only).
     const bibNorm = normalizePath(settings.pathToBibliography);
     if (!isAbsolutePath(settings.pathToBibliography)) {
-      this.watchedBibPaths.add(bibNorm);
+      this.globalWatchedBibPaths.add(bibNorm);
+      this.rebuildWatchedBibPaths();
     }
 
     for (const entry of bib) {
@@ -402,7 +407,7 @@ export class BibManager {
           this.mergeZoteroEntry(entry);
         }
       } catch (e) {
-        console.error('pandoc-reference-list: Zotero load failed:', e);
+        console.error('bripey-citation-suite: Zotero load failed:', e);
       }
     }
 
@@ -455,7 +460,7 @@ export class BibManager {
           modifiedEntries.set(k, this.bibCache.get(k)!);
         }
       } catch (e) {
-        console.error('pandoc-reference-list: Zotero refresh failed:', e);
+        console.error('bripey-citation-suite: Zotero refresh failed:', e);
       }
     }
 
@@ -666,13 +671,7 @@ export class BibManager {
         ? cachedDoc.source
         : await this.loadScopedEngine(settings);
 
-    if (settings?.bibliography?.length) {
-      for (const scopedBibPath of settings.bibliography) {
-        if (!isAbsolutePath(scopedBibPath)) {
-          this.watchedBibPaths.add(normalizePath(scopedBibPath));
-        }
-      }
-    }
+    this.updateScopedWatchedBibPaths(file, settings);
 
     const setNull = (): null => {
       const result: FileCache = {
@@ -998,6 +997,40 @@ export class BibManager {
         }
       }
     });
+  }
+
+  private updateScopedWatchedBibPaths(file: TFile, settings: ScopedSettings | null) {
+    const paths = new Set<string>();
+
+    if (settings?.bibliography?.length) {
+      for (const scopedBibPath of settings.bibliography) {
+        if (!isAbsolutePath(scopedBibPath)) {
+          paths.add(normalizePath(scopedBibPath));
+        }
+      }
+    }
+
+    if (paths.size) {
+      this.scopedWatchedBibPaths.set(file.path, paths);
+    } else {
+      this.scopedWatchedBibPaths.delete(file.path);
+    }
+
+    this.rebuildWatchedBibPaths();
+  }
+
+  private rebuildWatchedBibPaths() {
+    this.watchedBibPaths.clear();
+
+    for (const path of this.globalWatchedBibPaths) {
+      this.watchedBibPaths.add(path);
+    }
+
+    for (const paths of this.scopedWatchedBibPaths.values()) {
+      for (const path of paths) {
+        this.watchedBibPaths.add(path);
+      }
+    }
   }
 
   getCacheForPath(filePath: string) {

@@ -343,7 +343,7 @@ export default class ReferenceList extends Plugin {
   initStatusBar() {
     const ico = (this.statusBarIcon = this.addStatusBarItem());
     ico.addClass('pwc-status-icon', 'clickable-icon');
-    ico.setAttr('aria-label', t('Pandoc reference list settings'));
+    ico.setAttr('aria-label', t('Bripey Citation Suite settings'));
     ico.setAttr('data-tooltip-position', 'top');
     this.setStatusBarIdle();
     let isOpen = false;
@@ -504,7 +504,7 @@ export default class ReferenceList extends Plugin {
     ) {
       return view?.setMessage(
         t(
-          'Please provide the path to your pandoc compatible bibliography file in the Pandoc Reference List plugin settings.'
+          'Please provide the path to your bibliography file in the Bripey Citation Suite plugin settings.'
         )
       );
     }

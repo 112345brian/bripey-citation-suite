@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-sample-plugin",
+  "name": "bripey-citation-suite",
   "version": "2.0.31",
-  "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+  "description": "Bripey Citation Suite for Obsidian.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -51,6 +51,9 @@
     "text-clipper": "^2.2.0"
   },
   "jest": {
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/src/$1"
+    },
     "transformIgnorePatterns": [],
     "testEnvironment": "jsdom"
   }
