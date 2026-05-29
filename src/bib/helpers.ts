@@ -1,412 +1,260 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
-import https from 'https';
-import { request } from 'http';
-
-const execFileAsync = promisify(execFile);
+import { FileSystemAdapter, normalizePath, requestUrl } from 'obsidian';
 import { CSLList, PartialCSLEntry } from './types';
+import { parseBibFile } from './bibtex';
+export { zoteroItemToCSL } from './zotero-csl';
 
 export const DEFAULT_ZOTERO_PORT = '23119';
 
-function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+// ─── Path utilities (replaces node:path) ────────────────────────────────────
+
+export function isAbsolutePath(p: string): boolean {
+  return p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+}
+
+export function pathBasename(p: string): string {
+  return p.replace(/\\/g, '/').split('/').pop() ?? p;
+}
+
+// ─── Vault adapter helpers ───────────────────────────────────────────────────
+
+async function ensureVaultDir(vaultRelPath: string): Promise<void> {
+  if (!(await app.vault.adapter.exists(vaultRelPath))) {
+    await app.vault.adapter.mkdir(vaultRelPath);
   }
 }
 
-export function getBibPath(bibPath: string, getVaultRoot?: () => string) {
-  if (!fs.existsSync(bibPath)) {
-    const orig = bibPath;
-    if (getVaultRoot) {
-      bibPath = path.join(getVaultRoot(), bibPath);
-      if (!fs.existsSync(bibPath)) {
-        throw new Error(`bibToCSL: cannot access bibliography file '${bibPath}'.`);
-      }
-    } else {
-      throw new Error(`bibToCSL: cannot access bibliography file '${orig}'.`);
-    }
+// Read a file from disk. Handles both absolute paths (desktop) and
+// vault-relative paths (cross-platform).
+async function readFileText(filePath: string): Promise<string> {
+  if (isAbsolutePath(filePath)) {
+    // FileSystemAdapter.readLocalFile works for any absolute path on desktop.
+    const buffer = await FileSystemAdapter.readLocalFile(filePath);
+    return new TextDecoder('utf-8').decode(buffer);
   }
-
-  return bibPath;
+  return app.vault.adapter.read(normalizePath(filePath));
 }
 
-export async function bibToCSL(
-  bibPath: string,
-  pathToPandoc: string,
-  getVaultRoot?: () => string
-): Promise<PartialCSLEntry[]> {
-  bibPath = getBibPath(bibPath, getVaultRoot);
+// ─── Bibliography file resolution ───────────────────────────────────────────
 
-  const parsed = path.parse(bibPath);
-  if (parsed.ext === '.json') {
-    return new Promise((res, rej) => {
-      fs.readFile(bibPath, (err, data) => {
-        if (err) return rej(err);
-        try {
-          res(JSON.parse(data.toString()));
-        } catch (e) {
-          rej(e);
-        }
-      });
-    });
-  }
+// Resolve a configured bibliography path to a form we can read.
+// Priority: absolute path → vault-relative path → vault-root-relative path.
+export async function getBibPath(bibPath: string): Promise<string> {
+  if (isAbsolutePath(bibPath)) return bibPath;
 
-  if (!pathToPandoc) {
-    throw new Error('bibToCSL: path to pandoc is required for non CSL files.');
-  }
+  const normalized = normalizePath(bibPath);
+  if (await app.vault.adapter.exists(normalized)) return normalized;
 
-  if (!fs.existsSync(pathToPandoc)) {
-    throw new Error(`bibToCSL: cannot access pandoc at '${pathToPandoc}'.`);
-  }
-
-  const args = [bibPath, '-t', 'csljson', '--quiet'];
-
-  let res: { stdout: string; stderr: string };
-  try {
-    res = await execFileAsync(pathToPandoc, args, { maxBuffer: 50 * 1024 * 1024 });
-  } catch (e) {
-    const stderr = (e as any)?.stderr || '';
-    if (/Unknown output format csljson/.test(stderr)) {
-      throw new Error(
-        `Pandoc at '${pathToPandoc}' does not support CSL JSON output. ` +
-          'Please install Pandoc 2.11 or newer, then update the Pandoc path in this plugin settings if needed.'
-      );
-    }
-    throw e;
-  }
-
-  if (res.stderr) {
-    throw new Error(`bibToCSL: ${res.stderr}`);
-  }
-
-  return JSON.parse(res.stdout);
+  throw new Error(
+    `pandoc-reference-list: cannot find bibliography file "${bibPath}". ` +
+      'Provide an absolute path or a path relative to the vault root.'
+  );
 }
+
+export async function bibToCSL(bibPath: string): Promise<PartialCSLEntry[]> {
+  const resolved = await getBibPath(bibPath);
+  const raw = await readFileText(resolved);
+  return parseBibFile(raw, resolved);
+}
+
+// ─── CSL locale + style caching ─────────────────────────────────────────────
+
+const CACHE_DIR = normalizePath('.pandoc');
 
 export async function getCSLLocale(
   localeCache: Map<string, string>,
-  cacheDir: string,
+  _cacheDir: string,
   lang: string
-) {
-  if (localeCache.has(lang)) {
-    return localeCache.get(lang);
-  }
+): Promise<string> {
+  if (localeCache.has(lang)) return localeCache.get(lang)!;
 
   const url = `https://raw.githubusercontent.com/citation-style-language/locales/master/locales-${lang}.xml`;
-  const outpath = path.join(cacheDir, `locales-${lang}.xml`);
+  const cachePath = normalizePath(`${CACHE_DIR}/locales-${lang}.xml`);
 
-  ensureDir(cacheDir);
-  if (fs.existsSync(outpath)) {
-    const localeData = fs.readFileSync(outpath).toString();
-    localeCache.set(lang, localeData);
-    return localeData;
+  await ensureVaultDir(CACHE_DIR);
+
+  if (await app.vault.adapter.exists(cachePath)) {
+    const data = await app.vault.adapter.read(cachePath);
+    localeCache.set(lang, data);
+    return data;
   }
 
-  const str = await new Promise<string>((res, rej) => {
-    https.get(url, (result) => {
-      let output = '';
+  const resp = await requestUrl({ url, throw: false });
+  if (resp.status !== 200) {
+    throw new Error(`Error downloading CSL locale ${lang}: HTTP ${resp.status}`);
+  }
+  const str = resp.text;
+  if (str.startsWith('404')) {
+    throw new Error(`Error downloading CSL locale: 404 Not Found for ${lang}`);
+  }
 
-      result.setEncoding('utf8');
-      result.on('data', (chunk) => (output += chunk));
-      result.on('error', (e) => rej(`Downloading locale: ${e}`));
-      result.on('close', () => {
-        rej(new Error('Error: cannot download locale'));
-      });
-      result.on('end', () => {
-        if (/^404: Not Found/.test(output)) {
-          rej(new Error('Error downloading locale: 404: Not Found'));
-        } else {
-          res(output);
-        }
-      });
-    });
-  });
-
-  fs.writeFileSync(outpath, str);
+  await app.vault.adapter.write(cachePath, str);
   localeCache.set(lang, str);
   return str;
 }
 
 export async function getCSLStyle(
   styleCache: Map<string, string>,
-  cacheDir: string,
+  _cacheDir: string,
   url: string,
   explicitPath?: string
-) {
+): Promise<string> {
+  const key = explicitPath ?? url;
+
+  if (styleCache.has(key)) return styleCache.get(key)!;
+
   if (explicitPath) {
-    if (styleCache.has(explicitPath)) {
-      return styleCache.get(explicitPath);
-    }
-
-    if (!fs.existsSync(explicitPath)) {
-      throw new Error(
-        `Error: retrieving citation style; Cannot find file '${explicitPath}'.`
-      );
-    }
-
-    const styleData = fs.readFileSync(explicitPath).toString();
-    styleCache.set(explicitPath, styleData);
-    return styleData;
+    const raw = await readFileText(explicitPath);
+    styleCache.set(key, raw);
+    return raw;
   }
 
-  if (styleCache.has(url)) {
-    return styleCache.get(url);
-  }
+  const filename = pathBasename(url);
+  const cachePath = normalizePath(`${CACHE_DIR}/${filename}`);
 
-  const fileFromURL = url.split('/').pop();
-  const outpath = path.join(cacheDir, fileFromURL);
+  await ensureVaultDir(CACHE_DIR);
 
-  ensureDir(cacheDir);
-  if (fs.existsSync(outpath)) {
-    const styleData = fs.readFileSync(outpath).toString();
-    // Reject stale cached error responses (e.g. a previously downloaded 404).
-    // Valid CSL files are XML documents that start with '<'.
-    if (styleData.trimStart().startsWith('<')) {
-      styleCache.set(url, styleData);
-      return styleData;
+  if (await app.vault.adapter.exists(cachePath)) {
+    const data = await app.vault.adapter.read(cachePath);
+    // Reject stale error responses — valid CSL starts with '<'.
+    if (data.trimStart().startsWith('<')) {
+      styleCache.set(key, data);
+      return data;
     }
-    // Bad cache entry — delete it and re-download.
-    fs.unlinkSync(outpath);
+    await app.vault.adapter.remove(cachePath);
   }
 
-  const str = await new Promise<string>((res, rej) => {
-    https.get(url, (result) => {
-      let output = '';
-
-      if (result.statusCode !== 200) {
-        result.resume(); // drain the socket
-        return rej(
-          new Error(
-            `Error downloading CSL: HTTP ${result.statusCode} from ${url}`
-          )
-        );
-      }
-
-      result.setEncoding('utf8');
-      result.on('data', (chunk) => (output += chunk));
-      result.on('error', (e) => rej(`Error downloading CSL: ${e}`));
-      result.on('close', () => {
-        rej(new Error('Error: cannot download CSL'));
-      });
-      result.on('end', () => {
-        try {
-          res(output);
-        } catch (e) {
-          rej(e);
-        }
-      });
-    });
-  });
-
-  fs.writeFileSync(outpath, str);
-  styleCache.set(url, str);
+  const resp = await requestUrl({ url, throw: false });
+  if (resp.status !== 200) {
+    throw new Error(`Error downloading CSL style: HTTP ${resp.status} from ${url}`);
+  }
+  const str = resp.text;
+  await app.vault.adapter.write(cachePath, str);
+  styleCache.set(key, str);
   return str;
 }
 
-function httpGetLocal(port: string, urlPath: string): Promise<Buffer> {
-  return new Promise((res, rej) => {
-    const req = request(
-      { host: '127.0.0.1', port, path: urlPath, method: 'GET', headers: defaultHeaders },
-      (result) => {
-        const chunks: Buffer[] = [];
-        result.on('data', (chunk: Buffer) => chunks.push(chunk));
-        result.on('end', () => res(Buffer.concat(chunks)));
-        result.on('error', rej);
-      }
-    );
-    req.on('error', rej);
-    req.end();
-  });
-}
+// ─── Zotero (Better BibTeX) ──────────────────────────────────────────────────
 
 export const defaultHeaders = {
   'Content-Type': 'application/json',
   'User-Agent': 'obsidian/zotero',
   Accept: 'application/json',
-  Connection: 'keep-alive',
 };
 
-function getGlobal() {
-  if (window?.activeWindow) return activeWindow;
-  if (window) return window;
-  return global;
+export async function isZoteroRunning(
+  port: string = DEFAULT_ZOTERO_PORT
+): Promise<boolean> {
+  try {
+    const result = await Promise.race<{ status: number; text: string } | null>([
+      requestUrl({
+        url: `http://127.0.0.1:${port}/better-bibtex/cayw?probe=true`,
+        throw: false,
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
+    ]);
+    return result?.text === 'ready';
+  } catch {
+    return false;
+  }
+}
+
+async function bbtPost(port: string, body: object): Promise<any> {
+  const resp = await requestUrl({
+    url: `http://127.0.0.1:${port}/better-bibtex/json-rpc`,
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify(body),
+    throw: false,
+  });
+  if (resp.status !== 200) {
+    throw new Error(`Zotero BBT: HTTP ${resp.status}`);
+  }
+  return resp.json;
 }
 
 export async function getZUserGroups(
   port: string = DEFAULT_ZOTERO_PORT
-): Promise<Array<{ id: number; name: string }>> {
+): Promise<Array<{ id: number; name: string }> | null> {
   if (!(await isZoteroRunning(port))) return null;
-
-  return new Promise((res, rej) => {
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'user.groups',
-    });
-
-    const postRequest = request(
-      {
-        host: '127.0.0.1',
-        port: port,
-        path: '/better-bibtex/json-rpc',
-        method: 'POST',
-        headers: {
-          ...defaultHeaders,
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (result) => {
-        let output = '';
-
-        result.setEncoding('utf8');
-        result.on('data', (chunk) => (output += chunk));
-        result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('close', () => {
-          rej(new Error('Error: cannot connect to Zotero'));
-        });
-        result.on('end', () => {
-          try {
-            res(JSON.parse(output).result);
-          } catch (e) {
-            rej(e);
-          }
-        });
-      }
-    );
-
-    postRequest.write(body);
-    postRequest.end();
-  });
+  const data = await bbtPost(port, { jsonrpc: '2.0', method: 'user.groups' });
+  return data.result ?? null;
 }
 
 function panNum(n: number) {
-  if (n < 10) return `0${n}`;
-  return n.toString();
+  return n < 10 ? `0${n}` : String(n);
 }
 
 function timestampToZDate(ts: number) {
   const d = new Date(ts);
-  return `${d.getUTCFullYear()}-${panNum(d.getUTCMonth() + 1)}-${panNum(
-    d.getUTCDate()
-  )} ${panNum(d.getUTCHours())}:${panNum(d.getUTCMinutes())}:${panNum(
-    d.getUTCSeconds()
-  )}`;
+  return `${d.getUTCFullYear()}-${panNum(d.getUTCMonth() + 1)}-${panNum(d.getUTCDate())} ${panNum(d.getUTCHours())}:${panNum(d.getUTCMinutes())}:${panNum(d.getUTCSeconds())}`;
 }
 
 export async function getZModified(
   port: string = DEFAULT_ZOTERO_PORT,
   groupId: number,
   since: number
-): Promise<CSLList> {
+): Promise<CSLList | null> {
   if (!(await isZoteroRunning(port))) return null;
-
-  return new Promise((res, rej) => {
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'item.search',
-      params: [[['dateModified', 'isAfter', timestampToZDate(since)]], groupId],
-    });
-
-    const postRequest = request(
-      {
-        host: '127.0.0.1',
-        port: port,
-        path: '/better-bibtex/json-rpc',
-        method: 'POST',
-        headers: {
-          ...defaultHeaders,
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (result) => {
-        let output = '';
-
-        result.setEncoding('utf8');
-        result.on('data', (chunk) => (output += chunk));
-        result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('close', () => {
-          rej(new Error('Error: cannot connect to Zotero'));
-        });
-        result.on('end', () => {
-          try {
-            res(JSON.parse(output).result);
-          } catch (e) {
-            rej(e);
-          }
-        });
-      }
-    );
-
-    postRequest.write(body);
-    postRequest.end();
+  const data = await bbtPost(port, {
+    jsonrpc: '2.0',
+    method: 'item.search',
+    params: [[['dateModified', 'isAfter', timestampToZDate(since)]], groupId],
   });
+  return data.result ?? null;
 }
 
-function applyGroupID(list: CSLList, groupId: number) {
-  return list.map((item) => {
-    item.groupID = groupId;
-    return item;
-  });
+function applyGroupID(list: CSLList, groupId: number): CSLList {
+  return list.map((item) => ({ ...item, groupID: groupId }));
 }
 
 export async function getZBib(
   port: string = DEFAULT_ZOTERO_PORT,
-  cacheDir: string,
+  _cacheDir: string,
   groupId: number,
   loadCached?: boolean
-) {
+): Promise<CSLList | null> {
   const isRunning = await isZoteroRunning(port);
-  const cached = path.join(cacheDir, `zotero-library-${groupId}.json`);
+  const cachePath = normalizePath(`${CACHE_DIR}/zotero-library-${groupId}.json`);
 
-  ensureDir(cacheDir);
+  await ensureVaultDir(CACHE_DIR);
+
   if (loadCached || !isRunning) {
-    if (fs.existsSync(cached)) {
+    if (await app.vault.adapter.exists(cachePath)) {
       return applyGroupID(
-        JSON.parse(fs.readFileSync(cached).toString()) as CSLList,
+        JSON.parse(await app.vault.adapter.read(cachePath)) as CSLList,
         groupId
       );
     }
-    if (!isRunning) {
-      return null;
-    }
+    if (!isRunning) return null;
   }
 
-  const bib = await httpGetLocal(
-    port,
-    `/better-bibtex/export/library?/${groupId}/library.json`
-  );
+  const resp = await requestUrl({
+    url: `http://127.0.0.1:${port}/better-bibtex/export/library?/${groupId}/library.json`,
+    throw: false,
+  });
+  if (resp.status !== 200) throw new Error(`Zotero BBT export: HTTP ${resp.status}`);
 
-  const str = bib.toString();
-
-  fs.writeFileSync(cached, str);
-
+  const str = resp.text;
+  await app.vault.adapter.write(cachePath, str);
   return applyGroupID(JSON.parse(str) as CSLList, groupId);
 }
 
 export async function refreshZBib(
   port: string = DEFAULT_ZOTERO_PORT,
-  cacheDir: string,
+  _cacheDir: string,
   groupId: number,
   since: number
-) {
-  if (!(await isZoteroRunning(port))) {
-    return null;
-  }
+): Promise<{ list: CSLList; modified: Map<string, PartialCSLEntry> } | null> {
+  if (!(await isZoteroRunning(port))) return null;
 
-  const cached = path.join(cacheDir, `zotero-library-${groupId}.json`);
-  ensureDir(cacheDir);
-  if (!fs.existsSync(cached)) {
-    return null;
-  }
+  const cachePath = normalizePath(`${CACHE_DIR}/zotero-library-${groupId}.json`);
+  if (!(await app.vault.adapter.exists(cachePath))) return null;
 
   const mList = (await getZModified(port, groupId, since)) as CSLList;
+  if (!mList?.length) return null;
 
-  if (!mList?.length) {
-    return null;
-  }
-
-  const modified: Map<string, PartialCSLEntry> = new Map();
-  const newKeys: Set<string> = new Set();
+  const modified = new Map<string, PartialCSLEntry>();
+  const newKeys = new Set<string>();
 
   for (const mod of mList) {
     mod.id = (mod as any).citekey || (mod as any)['citation-key'];
@@ -415,108 +263,36 @@ export async function refreshZBib(
     newKeys.add(mod.id);
   }
 
-  const list = JSON.parse(fs.readFileSync(cached).toString()) as CSLList;
-
+  const list = JSON.parse(await app.vault.adapter.read(cachePath)) as CSLList;
   for (let i = 0; i < list.length; i++) {
-    const item = list[i];
-    if (modified.has(item.id)) {
-      newKeys.delete(item.id);
-      list[i] = modified.get(item.id);
+    if (modified.has(list[i].id)) {
+      newKeys.delete(list[i].id);
+      list[i] = modified.get(list[i].id)!;
     }
   }
+  for (const key of newKeys) list.push(modified.get(key)!);
 
-  for (const key of newKeys) {
-    list.push(modified.get(key));
-  }
-
-  fs.writeFileSync(cached, JSON.stringify(list));
-
-  return {
-    list: applyGroupID(list, groupId),
-    modified,
-  };
+  await app.vault.adapter.write(cachePath, JSON.stringify(list));
+  return { list: applyGroupID(list, groupId), modified };
 }
 
-export async function isZoteroRunning(port: string = DEFAULT_ZOTERO_PORT) {
-  return new Promise<boolean>((resolve) => {
-    const timer = getGlobal().setTimeout(() => {
-      req.destroy();
-      resolve(false);
-    }, 150);
+// ─── Zotero native REST API (Zotero 7/8, no Better BibTeX) ──────────────────
 
-    const req = request(
-      {
-        host: '127.0.0.1',
-        port,
-        path: '/better-bibtex/cayw?probe=true',
-        method: 'GET',
-        headers: defaultHeaders,
-      },
-      (result) => {
-        let output = '';
-        result.setEncoding('utf8');
-        result.on('data', (chunk: string) => (output += chunk));
-        result.on('end', () => {
-          getGlobal().clearTimeout(timer);
-          resolve(output === 'ready');
-        });
-        result.on('error', () => {
-          getGlobal().clearTimeout(timer);
-          resolve(false);
-        });
-      }
-    );
-    req.on('error', () => {
-      getGlobal().clearTimeout(timer);
-      resolve(false);
-    });
-    req.end();
-  });
-}
-
-// ─── Native Zotero API (Zotero 7/8, no Better BibTeX required) ───────────────
-
-/**
- * Low-level GET helper for the Zotero local REST API.
- * Returns parsed JSON body and the Last-Modified-Version header value.
- */
-function zoteroNativeGet(
+async function zoteroNativeGet(
   port: string,
   apiPath: string
 ): Promise<{ data: any; version: number }> {
-  return new Promise((res, rej) => {
-    const req = request(
-      {
-        host: '127.0.0.1',
-        port: port,
-        path: apiPath,
-        method: 'GET',
-        headers: { ...defaultHeaders },
-      },
-      (result) => {
-        let output = '';
-        const version = Number(result.headers['last-modified-version'] || 0);
-
-        result.setEncoding('utf8');
-        result.on('data', (chunk) => (output += chunk));
-        result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('close', () =>
-          rej(new Error('Error: cannot connect to Zotero'))
-        );
-        result.on('end', () => {
-          try {
-            res({ data: JSON.parse(output), version });
-          } catch (e) {
-            rej(e);
-          }
-        });
-      }
-    );
-    req.end();
+  const resp = await requestUrl({
+    url: `http://127.0.0.1:${port}${apiPath}`,
+    method: 'GET',
+    headers: defaultHeaders,
+    throw: false,
   });
+  if (resp.status !== 200) throw new Error(`Zotero native: HTTP ${resp.status} for ${apiPath}`);
+  const version = Number(resp.headers['last-modified-version'] ?? 0);
+  return { data: resp.json, version };
 }
 
-/** Fetch every item from a library, paging 100 at a time. */
 async function fetchAllZoteroItemsNative(
   port: string,
   libraryType: 'users' | 'groups',
@@ -527,19 +303,15 @@ async function fetchAllZoteroItemsNative(
   let start = 0;
   const allItems: any[] = [];
   let libraryVersion = 0;
-
   const sinceParam = since !== undefined ? `&since=${since}` : '';
 
   while (true) {
-    const apiPath =
-      `/api/${libraryType}/${libraryId}/items` +
-      `?format=json&itemType=-attachment&limit=${limit}&start=${start}${sinceParam}`;
-
-    const { data, version } = await zoteroNativeGet(port, apiPath);
+    const { data, version } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items?format=json&itemType=-attachment&limit=${limit}&start=${start}${sinceParam}`
+    );
     libraryVersion = version;
-
     if (!Array.isArray(data) || data.length === 0) break;
-
     allItems.push(...data);
     if (data.length < limit) break;
     start += limit;
@@ -548,183 +320,12 @@ async function fetchAllZoteroItemsNative(
   return { items: allItems, version: libraryVersion };
 }
 
-const ZOTERO_TYPE_TO_CSL: Record<string, string> = {
-  artwork: 'graphic',
-  audioRecording: 'song',
-  bill: 'bill',
-  blogPost: 'post-weblog',
-  book: 'book',
-  bookSection: 'chapter',
-  case: 'legal_case',
-  computerProgram: 'software',
-  conferencePaper: 'paper-conference',
-  dataset: 'dataset',
-  dictionaryEntry: 'entry-dictionary',
-  document: 'document',
-  email: 'personal_communication',
-  encyclopediaArticle: 'entry-encyclopedia',
-  film: 'motion_picture',
-  forumPost: 'post',
-  hearing: 'hearing',
-  instantMessage: 'personal_communication',
-  interview: 'interview',
-  journalArticle: 'article-journal',
-  letter: 'personal_communication',
-  magazineArticle: 'article-magazine',
-  manuscript: 'manuscript',
-  map: 'map',
-  newspaperArticle: 'article-newspaper',
-  patent: 'patent',
-  podcast: 'broadcast',
-  presentation: 'speech',
-  radioBroadcast: 'broadcast',
-  report: 'report',
-  statute: 'legislation',
-  thesis: 'thesis',
-  tvBroadcast: 'broadcast',
-  videoRecording: 'motion_picture',
-  webpage: 'webpage',
-};
+import { zoteroItemToCSL as _zoteroItemToCSL } from './zotero-csl';
 
-function parseZoteroDate(dateStr: string): any {
-  if (!dateStr) return undefined;
-  const fullMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (fullMatch) {
-    return {
-      'date-parts': [
-        [Number(fullMatch[1]), Number(fullMatch[2]), Number(fullMatch[3])],
-      ],
-    };
-  }
-  const yearMonthMatch = dateStr.match(/(\d{4})-(\d{2})/);
-  if (yearMonthMatch) {
-    return {
-      'date-parts': [[Number(yearMonthMatch[1]), Number(yearMonthMatch[2])]],
-    };
-  }
-  const yearMatch = dateStr.match(/(\d{4})/);
-  if (yearMatch) {
-    return { 'date-parts': [[Number(yearMatch[1])]] };
-  }
-  return { raw: dateStr };
-}
-
-function zoteroCreatorToCSL(creator: any): any {
-  if (creator.name) return { literal: creator.name };
-  const result: any = {};
-  if (creator.lastName) result.family = creator.lastName;
-  if (creator.firstName) result.given = creator.firstName;
-  return result;
-}
-
-const CREATOR_TYPE_TO_CSL_ROLE: Record<string, string> = {
-  author: 'author',
-  editor: 'editor',
-  translator: 'translator',
-  contributor: 'contributor',
-  bookAuthor: 'container-author',
-  seriesEditor: 'collection-editor',
-  director: 'director',
-  interviewer: 'interviewer',
-  interviewee: 'author',
-  composer: 'composer',
-  producer: 'producer',
-  scriptwriter: 'script-writer',
-  reviewedAuthor: 'reviewed-author',
-  performer: 'performer',
-  wordsBy: 'lyricist',
-  recipient: 'recipient',
-  witness: 'witness',
-  castMember: 'performer',
-};
-
-/** Convert a single Zotero item (format=json) to a PartialCSLEntry. Returns null if no citationKey. */
-export function zoteroItemToCSL(
-  item: any,
-  groupId: number
-): PartialCSLEntry | null {
-  const data = item.data;
-  if (!data?.citationKey) return null;
-
-  const cslItem: any = {
-    id: data.citationKey,
-    type: ZOTERO_TYPE_TO_CSL[data.itemType] || 'document',
-    groupID: groupId,
-  };
-
-  if (data.title) cslItem.title = data.title;
-
-  if (data.creators?.length) {
-    const byRole: Record<string, any[]> = {};
-    for (const creator of data.creators) {
-      const role = CREATOR_TYPE_TO_CSL_ROLE[creator.creatorType] || 'author';
-      if (!byRole[role]) byRole[role] = [];
-      byRole[role].push(zoteroCreatorToCSL(creator));
-    }
-    for (const [role, names] of Object.entries(byRole)) {
-      cslItem[role] = names;
-    }
-  }
-
-  if (data.date) cslItem.issued = parseZoteroDate(data.date);
-
-  // Container title (first truthy wins)
-  const containerTitle =
-    data.publicationTitle ||
-    data.bookTitle ||
-    data.encyclopediaTitle ||
-    data.dictionaryTitle ||
-    data.blogTitle ||
-    data.websiteTitle ||
-    data.forumTitle ||
-    data.proceedingsTitle ||
-    data.programTitle;
-  if (containerTitle) cslItem['container-title'] = containerTitle;
-  if (data.journalAbbreviation)
-    cslItem['container-title-short'] = data.journalAbbreviation;
-
-  if (data.volume) cslItem.volume = data.volume;
-  if (data.issue) cslItem.issue = data.issue;
-  if (data.pages) cslItem.page = data.pages;
-  if (data.numberOfVolumes) cslItem['number-of-volumes'] = data.numberOfVolumes;
-  if (data.numberOfPages) cslItem['number-of-pages'] = data.numberOfPages;
-  if (data.edition) cslItem.edition = data.edition;
-
-  if (data.publisher) cslItem.publisher = data.publisher;
-  if (data.institution) cslItem.publisher = data.institution;
-  if (data.university) cslItem.publisher = data.university;
-  if (data.place) cslItem['publisher-place'] = data.place;
-
-  if (data.DOI) cslItem.DOI = data.DOI;
-  if (data.URL) cslItem.URL = data.URL;
-  if (data.ISBN) cslItem.ISBN = data.ISBN;
-  if (data.ISSN) cslItem.ISSN = data.ISSN;
-  if (data.callNumber) cslItem['call-number'] = data.callNumber;
-
-  if (data.abstractNote) cslItem.abstract = data.abstractNote;
-  if (data.language) cslItem.language = data.language;
-
-  if (data.thesisType) cslItem.genre = data.thesisType;
-  if (data.reportType) cslItem.genre = data.reportType;
-  if (data.reportNumber) cslItem.number = data.reportNumber;
-  if (data.patentNumber) cslItem.number = data.patentNumber;
-  if (data.country) cslItem.jurisdiction = data.country;
-  if (data.applicationNumber) cslItem['call-number'] = data.applicationNumber;
-
-  if (data.series) cslItem['collection-title'] = data.series;
-  if (data.seriesTitle) cslItem['collection-title'] = data.seriesTitle;
-  if (data.seriesNumber) cslItem['collection-number'] = data.seriesNumber;
-
-  if (data.conferenceName) cslItem['event-title'] = data.conferenceName;
-  if (data.section) cslItem.section = data.section;
-
-  return cslItem as PartialCSLEntry;
-}
-
-/** groupId=1 means "My Library" (users/0); any other positive ID is a group library. */
-function nativeLibraryCoords(
-  groupId: number
-): { libraryType: 'users' | 'groups'; libraryId: number | string } {
+function nativeLibraryCoords(groupId: number): {
+  libraryType: 'users' | 'groups';
+  libraryId: number | string;
+} {
   return groupId === 1
     ? { libraryType: 'users', libraryId: 0 }
     : { libraryType: 'groups', libraryId: groupId };
@@ -734,12 +335,9 @@ export async function isZoteroRunningNative(
   port: string = DEFAULT_ZOTERO_PORT
 ): Promise<boolean> {
   try {
-    const p = zoteroNativeGet(port, '/api/users/0/items?limit=1');
     const result = await Promise.race<{ data: any; version: number } | null>([
-      p,
-      new Promise<null>((res) => {
-        getGlobal().setTimeout(() => res(null), 2000);
-      }),
+      zoteroNativeGet(port, '/api/users/0/items?limit=1'),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
     ]);
     return result !== null && Array.isArray(result.data);
   } catch {
@@ -764,7 +362,7 @@ export async function getZUserGroupsNative(
       }
     }
   } catch (e) {
-    console.error('Error fetching Zotero groups (native API):', e);
+    console.error('pandoc-reference-list: error fetching Zotero groups:', e);
   }
 
   return groups;
@@ -772,17 +370,18 @@ export async function getZUserGroupsNative(
 
 export async function getZBibNative(
   port: string = DEFAULT_ZOTERO_PORT,
-  cacheDir: string,
+  _cacheDir: string,
   groupId: number,
   loadCached?: boolean
 ): Promise<{ list: CSLList | null; version: number }> {
   const isRunning = await isZoteroRunningNative(port);
-  const cached = path.join(cacheDir, `zotero-native-library-${groupId}.json`);
+  const cachePath = normalizePath(`${CACHE_DIR}/zotero-native-library-${groupId}.json`);
 
-  ensureDir(cacheDir);
+  await ensureVaultDir(CACHE_DIR);
+
   if (loadCached || !isRunning) {
-    if (fs.existsSync(cached)) {
-      const cacheData = JSON.parse(fs.readFileSync(cached).toString());
+    if (await app.vault.adapter.exists(cachePath)) {
+      const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
       return {
         list: applyGroupID(cacheData.items as CSLList, groupId),
         version: cacheData.version ?? 0,
@@ -800,26 +399,28 @@ export async function getZBibNative(
 
   const cslItems: PartialCSLEntry[] = [];
   for (const rawItem of rawItems) {
-    const cslItem = zoteroItemToCSL(rawItem, groupId);
+    const cslItem = _zoteroItemToCSL(rawItem, groupId);
     if (cslItem) cslItems.push(cslItem);
   }
 
-  fs.writeFileSync(cached, JSON.stringify({ items: cslItems, version }));
+  await app.vault.adapter.write(
+    cachePath,
+    JSON.stringify({ items: cslItems, version })
+  );
 
   return { list: applyGroupID(cslItems, groupId), version };
 }
 
 export async function refreshZBibNative(
   port: string = DEFAULT_ZOTERO_PORT,
-  cacheDir: string,
+  _cacheDir: string,
   groupId: number,
   sinceVersion: number
 ): Promise<{ list: CSLList; modified: Map<string, PartialCSLEntry> } | null> {
   if (!(await isZoteroRunningNative(port))) return null;
 
-  const cached = path.join(cacheDir, `zotero-native-library-${groupId}.json`);
-  ensureDir(cacheDir);
-  if (!fs.existsSync(cached)) return null;
+  const cachePath = normalizePath(`${CACHE_DIR}/zotero-native-library-${groupId}.json`);
+  if (!(await app.vault.adapter.exists(cachePath))) return null;
 
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
   const { items: rawItems, version } = await fetchAllZoteroItemsNative(
@@ -831,31 +432,31 @@ export async function refreshZBibNative(
 
   if (!rawItems?.length) return null;
 
-  const modified: Map<string, PartialCSLEntry> = new Map();
-  const newKeys: Set<string> = new Set();
+  const modified = new Map<string, PartialCSLEntry>();
+  const newKeys = new Set<string>();
 
   for (const rawItem of rawItems) {
-    const cslItem = zoteroItemToCSL(rawItem, groupId);
+    const cslItem = _zoteroItemToCSL(rawItem, groupId);
     if (!cslItem?.id) continue;
     modified.set(cslItem.id, cslItem);
     newKeys.add(cslItem.id);
   }
 
-  const cacheData = JSON.parse(fs.readFileSync(cached).toString());
+  const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
   const list = cacheData.items as CSLList;
 
   for (let i = 0; i < list.length; i++) {
-    const item = list[i];
-    if (modified.has(item.id)) {
-      newKeys.delete(item.id);
-      list[i] = modified.get(item.id);
+    if (modified.has(list[i].id)) {
+      newKeys.delete(list[i].id);
+      list[i] = modified.get(list[i].id)!;
     }
   }
-  for (const key of newKeys) {
-    list.push(modified.get(key));
-  }
+  for (const key of newKeys) list.push(modified.get(key)!);
 
-  fs.writeFileSync(cached, JSON.stringify({ items: list, version }));
+  await app.vault.adapter.write(
+    cachePath,
+    JSON.stringify({ items: list, version })
+  );
 
   return { list: applyGroupID(list, groupId), modified };
 }
@@ -872,16 +473,13 @@ export async function getItemJSONFromCiteKeysNative(
 
   for (const citeKey of citeKeys) {
     try {
-      const searchPath =
-        `/api/${libraryType}/${libraryId}/items` +
-        `?format=json&q=${encodeURIComponent(citeKey)}&limit=10`;
-      const { data } = await zoteroNativeGet(port, searchPath);
-
+      const { data } = await zoteroNativeGet(
+        port,
+        `/api/${libraryType}/${libraryId}/items?format=json&q=${encodeURIComponent(citeKey)}&limit=10`
+      );
       if (!Array.isArray(data)) continue;
 
-      const match = data.find(
-        (item: any) => item.data?.citationKey === citeKey
-      );
+      const match = data.find((item: any) => item.data?.citationKey === citeKey);
       if (!match) continue;
 
       const itemKey = match.key;
@@ -890,27 +488,18 @@ export async function getItemJSONFromCiteKeysNative(
           ? `zotero://select/library/items/${itemKey}`
           : `zotero://select/groups/${libraryID}/items/${itemKey}`;
 
-      // Fetch PDF attachments for this item
-      const attPath =
-        `/api/${libraryType}/${libraryId}/items/${itemKey}/children` +
-        `?format=json&itemType=attachment`;
-      const { data: children } = await zoteroNativeGet(port, attPath);
+      const { data: children } = await zoteroNativeGet(
+        port,
+        `/api/${libraryType}/${libraryId}/items/${itemKey}/children?format=json&itemType=attachment`
+      );
 
       const attachments = Array.isArray(children)
         ? children
-            .filter(
-              (c: any) =>
-                c.data?.contentType === 'application/pdf' && c.data?.path
-            )
+            .filter((c: any) => c.data?.contentType === 'application/pdf' && c.data?.path)
             .map((c: any) => ({ path: c.data.path }))
         : [];
 
-      results.push({
-        citekey: citeKey,
-        citationKey: citeKey,
-        select: selectUrl,
-        attachments,
-      });
+      results.push({ citekey: citeKey, citationKey: citeKey, select: selectUrl, attachments });
     } catch {
       // skip individual failures
     }
@@ -919,71 +508,28 @@ export async function getItemJSONFromCiteKeysNative(
   return results.length ? results : null;
 }
 
-// ─── BBT (Better BibTeX) API ──────────────────────────────────────────────────
-
 export async function getItemJSONFromCiteKeys(
   port: string = DEFAULT_ZOTERO_PORT,
   citeKeys: string[],
   libraryID: number
-) {
+): Promise<any[] | null> {
   if (!(await isZoteroRunning(port))) return null;
 
-  let res: any;
   try {
-    res = await new Promise((res, rej) => {
-      const body = JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'item.export',
-        params: [citeKeys, '36a3b0b5-bad0-4a04-b79b-441c7cef77db', libraryID],
-      });
-
-      const postRequest = request(
-        {
-          host: '127.0.0.1',
-          port: port,
-          path: '/better-bibtex/json-rpc',
-          method: 'POST',
-          headers: {
-            ...defaultHeaders,
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (result) => {
-          let output = '';
-
-          result.setEncoding('utf8');
-          result.on('data', (chunk) => (output += chunk));
-          result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-          result.on('close', () => {
-            rej(new Error('Error: cannot connect to Zotero'));
-          });
-          result.on('end', () => {
-            try {
-              res(JSON.parse(output));
-            } catch (e) {
-              rej(e);
-            }
-          });
-        }
-      );
-
-      postRequest.write(body);
-      postRequest.end();
+    const data = await bbtPost(port, {
+      jsonrpc: '2.0',
+      method: 'item.export',
+      params: [citeKeys, '36a3b0b5-bad0-4a04-b79b-441c7cef77db', libraryID],
     });
-  } catch (e) {
-    console.error(e);
-    return null;
-  }
 
-  try {
-    if (res.error?.message) {
-      console.error(new Error(res.error.message));
+    if (data.error?.message) {
+      console.error(new Error(data.error.message));
       return null;
     }
 
-    return Array.isArray(res.result)
-      ? JSON.parse(res.result[2]).items
-      : JSON.parse(res.result).items;
+    return Array.isArray(data.result)
+      ? JSON.parse(data.result[2]).items
+      : JSON.parse(data.result).items;
   } catch (e) {
     console.error(e);
     return null;

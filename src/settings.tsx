@@ -1,5 +1,4 @@
-import { Notice, PluginSettingTab, Setting, TextComponent } from 'obsidian';
-import which from 'which';
+import { PluginSettingTab, Setting } from 'obsidian';
 
 import { t } from './lang/helpers';
 import ReferenceList from './main';
@@ -13,7 +12,6 @@ import { langListRaw } from './bib/cslLangList';
 import { ZoteroPullSetting } from './settings/ZoteroPullSetting';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
-  pathToPandoc: '',
   tooltipDelay: 400,
   zoteroGroups: [],
   renderCitations: true,
@@ -30,7 +28,6 @@ export interface ZoteroGroup {
 }
 
 export interface ReferenceListSettings {
-  pathToPandoc: string;
   pathToBibliography?: string;
 
   cslStyleURL?: string;
@@ -70,93 +67,22 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName(t('Fallback path to Pandoc'))
-      .setDesc(
-        t(
-          "The absolute path to the Pandoc executable. This plugin will attempt to locate pandoc for you and will use this path if it fails to do so. To find pandoc, use the output of 'which pandoc' in a terminal on Mac/Linux or 'Get-Command pandoc' in powershell on Windows."
-        )
-      )
-      .then((setting) => {
-        let input: TextComponent;
-        setting.addText((text) => {
-          input = text;
-          text.setValue(this.plugin.settings.pathToPandoc).onChange((value) => {
-            this.plugin.settings.pathToPandoc = value;
-            this.plugin.saveSettings();
-          });
-        });
-
-        setting.addExtraButton((b) => {
-          b.setIcon('magnifying-glass');
-          b.setTooltip(t('Attempt to find Pandoc automatically'));
-          b.onClick(() => {
-            which('pandoc')
-              .then((pathToPandoc) => {
-                if (pathToPandoc) {
-                  input.setValue(pathToPandoc);
-
-                  this.plugin.settings.pathToPandoc = pathToPandoc;
-                  this.plugin.saveSettings();
-                } else {
-                  new Notice(
-                    t(
-                      'Unable to find pandoc on your system. If it is installed, please manually enter a path.'
-                    )
-                  );
-                }
-              })
-              .catch((e) => {
-                new Notice(
-                  t(
-                    'Unable to find pandoc on your system. If it is installed, please manually enter a path.'
-                  )
-                );
-                console.error(e);
-              });
-          });
-        });
-      });
-
-    new Setting(containerEl)
       .setName(t('Path to bibliography file'))
       .setDesc(
         t(
-          'The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file\'s frontmatter.'
+          'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. Can be overridden per-note via the "bibliography" frontmatter key.'
         )
       )
       .then((setting) => {
-        let input: TextComponent;
         setting.addText((text) => {
-          input = text;
           text
-            .setValue(this.plugin.settings.pathToBibliography)
+            .setValue(this.plugin.settings.pathToBibliography ?? '')
             .onChange((value) => {
-              const prev = this.plugin.settings.pathToBibliography;
               this.plugin.settings.pathToBibliography = value;
-              this.plugin.saveSettings(() => {
-                this.plugin.bibManager.clearWatcher(prev);
-                this.plugin.bibManager.reinit(true);
-              });
-            });
-        });
-
-        setting.addExtraButton((b) => {
-          b.setIcon('folder');
-          b.setTooltip(t('Select a bibliography file.'));
-          b.onClick(() => {
-            const path = require('electron').remote.dialog.showOpenDialogSync({
-              properties: ['openFile'],
-            });
-
-            if (path && path.length) {
-              input.setValue(path[0]);
-
-              this.plugin.settings.pathToBibliography = path[0];
               this.plugin.saveSettings(() =>
                 this.plugin.bibManager.reinit(true)
               );
-            }
-          });
+            });
         });
       });
 
@@ -191,37 +117,16 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Custom citation style'))
       .setDesc(
         t(
-          'Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file\'s frontmatter. A URL can be supplied when setting the style via frontmatter.'
+          'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key. A URL can be supplied when setting the style via frontmatter.'
         )
       )
       .then((setting) => {
-        let input: TextComponent;
         setting.addText((text) => {
-          input = text;
-          text.setValue(this.plugin.settings.cslStylePath).onChange((value) => {
+          text.setValue(this.plugin.settings.cslStylePath ?? '').onChange((value) => {
             this.plugin.settings.cslStylePath = value;
             this.plugin.saveSettings(() =>
               this.plugin.bibManager.reinit(false)
             );
-          });
-        });
-
-        setting.addExtraButton((b) => {
-          b.setIcon('folder');
-          b.setTooltip(t('Select a CSL file located on your computer'));
-          b.onClick(() => {
-            const path = require('electron').remote.dialog.showOpenDialogSync({
-              properties: ['openFile'],
-            });
-
-            if (path && path.length) {
-              input.setValue(path[0]);
-
-              this.plugin.settings.cslStylePath = path[0];
-              this.plugin.saveSettings(() =>
-                this.plugin.bibManager.reinit(false)
-              );
-            }
           });
         });
       });

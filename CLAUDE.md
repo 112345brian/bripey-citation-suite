@@ -2,17 +2,18 @@
 
 ## Commands
 - Build: `npm run build` (production minified) / `npm run dev` (watch mode)
-- Test: `npm test` (Jest + jsdom — requires pandoc at `/opt/homebrew/bin/pandoc` for bib tests)
+- Test: `npm test` (Jest + jsdom — Zotero tests require a live Zotero instance)
 - Lint/Format: `npm run lint` / `npm run prettier` / `npm run clean` (both)
 - Run/Dev: copy `main.js`, `manifest.json`, `styles.css` into your vault's `.obsidian/plugins/obsidian-pandoc-reference-list/` after building
 
 ## Stack
 - TypeScript 5.x (compiled by esbuild, type-checked by `tsc --noemit`)
-- Obsidian desktop plugin — Electron/Node.js, min Obsidian 0.15.0; no mobile support
+- Obsidian plugin — desktop + mobile, min Obsidian 0.15.0
 - Preact aliased as React (`react` and `react-dom` both resolve to `@preact/compat`)
 - `citeproc` (2.4.x): CSL citation rendering engine — not replaceable
+- `@retorquere/bibtex-parser`: pure-JS BibTeX/BibLaTeX parser (replaces Pandoc)
 - `fuse.js`: fuzzy search powering citekey autocomplete
-- `shell-path`: resolve user's shell PATH so `which pandoc` works from Electron
+- No Node.js modules — all I/O uses Obsidian's `vault.adapter`, `FileSystemAdapter.readLocalFile`, and `requestUrl`
 
 ## Architecture
 - `src/bib/` — bibliography loading, Zotero sync, CSL rendering; no UI imports
@@ -37,9 +38,10 @@
 - [2025-05-29] `execa` removed — `child_process.execFile` via `util.promisify` covers the single pandoc invocation; `execa` was multi-MB for one call
 - [2025-05-29] `download` removed — replaced with `node:http` requests already present in the file for Zotero JSON-RPC; `download` was only used for two HTTP GETs
 - [2025-05-29] `react-select` removed — replaced with a minimal `SearchSelect` Preact component; `react-select` was ~70 KB minified for two dropdowns
+- [2025-05-29] Pandoc removed — replaced with `@retorquere/bibtex-parser` (pure JS); enables mobile and removes the binary dependency entirely
+- [2025-05-29] All `node:` modules removed — `vault.adapter` + `FileSystemAdapter.readLocalFile` + `requestUrl` cover every use case; `isDesktopOnly` flipped to false
 
 ## TODO
-- [ ] Remove all Node.js deps — replace `node:fs`/`node:http`/`node:https`/`node:path`/`node:child_process` with Obsidian APIs (`requestUrl`, `vault.adapter`, `FileSystemAdapter.readLocalFile`, `normalizePath`, vault events); drop Pandoc entirely by adding `@retorquere/bibtex-parser`; set `isDesktopOnly: false`
 - [ ] Semicolons in citation prefixes/suffixes still sometimes mis-parse if the suffix itself contains `@` (edge case of the lookahead fix)
 - [ ] Table cell citekey autocomplete corrupts text — Obsidian `EditorSuggest` API limitation, unfixable without upstream change
 - [ ] TypeScript `moduleResolution` — currently `"node"` (deprecated in TS 5.x); safe to keep but could be updated to `"bundler"` for stricter correctness
@@ -47,7 +49,7 @@
 ## Tests
 - Run: `npm test`
 - Test files: `src/parser/tests/parser.test.ts`, `src/bib/tests/bibManager.test.ts`
-- Parser tests cover happy-path citation segment parsing including wikilink aliases and the semicolon-in-suffix fix
-- `bibManager` tests cover `bibToCSL`, `getCSLLocale`, `getCSLStyle`; the `getZUserGroups` and `isZoteroRunning` tests require a live Zotero instance and will fail without one
-- Not covered: CSL rendering pipeline, citeproc engine construction, Zotero type mapping (48 item types), native API sync, settings persistence
-- Known skip: `getZBib` test is commented out (requires live library data)
+- Parser tests: 60 tests covering citation segment parsing, wikilink aliases, semicolon-in-suffix fix
+- `bibManager` tests cover `SimpleLRU` (5 tests), `zoteroItemToCSL` field mapping (7 tests), and `bibToCSL`/`getCSLLocale`/`getCSLStyle`
+- The `getZUserGroups` and `isZoteroRunning` tests require a live Zotero instance; `getZBib` is commented out
+- Not covered: BibTeX parser field mapping (pure-JS, worth adding), CSL rendering pipeline, native API sync, settings persistence

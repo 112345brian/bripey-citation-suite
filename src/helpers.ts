@@ -1,8 +1,6 @@
 import { FileSystemAdapter, htmlToMarkdown } from 'obsidian';
-import { shellPath } from 'shell-path';
 
 export function getVaultRoot() {
-  // This is a desktop only plugin, so assume adapter is FileSystemAdapter
   return (app.vault.adapter as FileSystemAdapter).getBasePath();
 }
 
@@ -31,27 +29,6 @@ export class PromiseCapability<T> {
         this.settled = true;
       };
     });
-  }
-}
-
-export async function fixPath() {
-  if (process.platform === 'win32') {
-    return;
-  }
-
-  try {
-    const path = await shellPath();
-
-    process.env.PATH =
-      path ||
-      [
-        './node_modules/.bin',
-        '/.nodebrew/current/bin',
-        '/usr/local/bin',
-        process.env.PATH,
-      ].join(':');
-  } catch (e) {
-    console.error(e);
   }
 }
 

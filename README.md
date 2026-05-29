@@ -82,14 +82,23 @@ Forks cherry-picked from:
 - [wjvg-gif/obsidian-pandoc-reference-list-zotero8](https://github.com/wjvg-gif/obsidian-pandoc-reference-list-zotero8)
 - [sjelms/obsidian-pandoc-inline-citations](https://github.com/sjelms/obsidian-pandoc-inline-citations)
 
+## Mobile support
+
+This fork works on iOS and Android. You do not need Pandoc or Better BibTeX. Requirements:
+
+- **Bibliography file:** `.bib`, `.json` (CSL-JSON), or `.yaml` (CSL-YAML), stored inside your vault. Vault-relative paths work on all platforms (e.g. `references.bib` or `assets/refs.bib`). Absolute paths also work on desktop.
+- **Zotero:** The native Zotero 7/8 REST API works on mobile as long as Zotero is running on the same local network and is accessible by IP.
+- **CSL styles:** Downloaded automatically on first use and cached in `.pandoc/` inside the vault. A local path to a `.csl` file also works.
+
 ## A note on how this fork was made
 
 This fork was assembled with significant help from an AI coding assistant (Claude). The bug diagnosis, fork comparison, cherry-pick selection, and cache fix were all done in a Claude Code session. The code changes are small and well-understood, but you should know that going in.
 
 ## Setup
 
-- Ensure [Pandoc](https://pandoc.org/) is installed. **This plugin requires at least version 2.11.**
-- Supply a path to a compatible bibliography file in plugin settings, or specify one per-note in YAML frontmatter:
+- Supply a path to your bibliography file in plugin settings. Vault-relative paths (e.g. `references.bib`) are recommended for cross-platform use. Absolute paths also work on desktop.
+- Supported formats: **BibTeX/BibLaTeX** (`.bib`), **CSL-JSON** (`.json`), **CSL-YAML** (`.yaml`/`.yml`). Pandoc is no longer required.
+- You can also specify a bibliography per-note in YAML frontmatter:
 
 ```yaml
 ---
