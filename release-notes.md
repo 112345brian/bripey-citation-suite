@@ -1,3 +1,7 @@
+## 2.1.1
+
+- **Fix: copy button in the reference sidebar was broken on desktop.** The "Copy list" button (and any other clipboard operation) threw a module resolution error because `await import('electron')` is left verbatim by esbuild 0.13.x in CJS output, which Electron's renderer can't resolve as an ES module. Replaced with synchronous `require('electron')` — same fix as the earlier Pandoc `child_process` crash.
+
 ## 2.1.0
 
 ### Mobile support

@@ -1,5 +1,10 @@
 import { FileSystemAdapter, Platform, htmlToMarkdown } from 'obsidian';
 
+// esbuild 0.13.x leaves dynamic import() of Node/Electron builtins verbatim
+// in CJS output, which Electron's renderer can't resolve as an ES module.
+// Synchronous require() works correctly in Electron's Node integration.
+declare const require: (id: string) => any;
+
 export function getVaultRoot() {
   return (app.vault.adapter as FileSystemAdapter).getBasePath();
 }
@@ -9,7 +14,7 @@ export async function copyElToClipboard(el: HTMLElement) {
   const text = htmlToMarkdown(html);
 
   if (Platform.isDesktop) {
-    const { clipboard } = await import('electron');
+    const { clipboard } = require('electron');
     clipboard.write({ html, text });
     return;
   }
@@ -29,7 +34,7 @@ export async function copyElToClipboard(el: HTMLElement) {
 
 export async function copyTextToClipboard(text: string) {
   if (Platform.isDesktop) {
-    const { clipboard } = await import('electron');
+    const { clipboard } = require('electron');
     clipboard.writeText(text);
     return;
   }
