@@ -12,6 +12,19 @@ import {
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 
+// ZotLit (plugin ID "zotlit") also registers an EditorSuggest that fires on
+// the bracketed citation context: /[[【]@.../  Its trigger only matches when
+// "[" immediately precedes "@", so it never conflicts with bare @citekey
+// completions. When ZotLit is active we yield the bracketed context to it
+// and keep bare @key suggestions for ourselves.
+export function isZotLitSuggestActive(app: App): boolean {
+  const plugins = (app as any).plugins?.plugins;
+  if (!plugins?.['zotlit']) return false;
+  // Default setting is enabled; only return false when explicitly turned off.
+  const current = plugins['zotlit'].settings?.current;
+  return current ? current.citationEditorSuggester !== false : true;
+}
+
 interface Loading {
   loading: boolean;
 }
@@ -195,6 +208,13 @@ export class CiteSuggest extends EditorSuggest<
 
     if (!match) return null;
     this.lastSelect = null;
+
+    // match[1] is the character before "@". When it is "[", ZotLit's
+    // citation suggester handles that context — yield to it to avoid showing
+    // two competing suggestion panels for [@key completions.
+    if (match[1] === '[' && isZotLitSuggestActive(this.app)) {
+      return null;
+    }
 
     if (!this.context && pullFromZotero) {
       this.refreshZBib();

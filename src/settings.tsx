@@ -2,6 +2,7 @@ import { Platform, PluginSettingTab, Setting } from 'obsidian';
 
 import { t } from './lang/helpers';
 import { findPandoc } from './bib/pandoc';
+import { isZotLitSuggestActive } from './citeSuggest/citeSuggest';
 import ReferenceList from './main';
 import ReactDOM from 'react-dom';
 import React from 'react';
@@ -271,12 +272,17 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           })
       );
 
+    const zotlitActive = isZotLitSuggestActive(this.app);
     new Setting(containerEl)
       .setName(t('Show citekey suggestions'))
       .setDesc(
-        t(
-          'When enabled, an autocomplete dialog will display when typing citation keys.'
-        )
+        zotlitActive
+          ? t(
+              'ZotLit detected — [@key completions are handled by ZotLit. This plugin still provides bare @key suggestions (outside brackets) and for .bib file entries.'
+            )
+          : t(
+              'When enabled, an autocomplete dialog will display when typing citation keys.'
+            )
       )
       .addToggle((text) =>
         text
