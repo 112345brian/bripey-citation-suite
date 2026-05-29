@@ -927,6 +927,19 @@ export class BibManager {
       .map((a: any) => [a.family, a.given].filter(Boolean).join(', ') || a.literal || '')
       .filter(Boolean);
 
+    // Build the "zotero-key" value ZotLit needs to index this note.
+    // Format: ITEMKEY for My Library (groupID 1), ITEMKEYgGROUPID for group libraries.
+    // See ZotLit's getItemKeyGroupID and ZOTERO_KEY_FIELDNAME.
+    const zoteroItemKey: string | undefined = entry?._zoteroKey;
+    const groupId: number | undefined = entry?.groupID;
+    let zoteroKeyField: string | null = null;
+    if (zoteroItemKey) {
+      zoteroKeyField =
+        groupId && groupId !== 1
+          ? `${zoteroItemKey}g${groupId}`
+          : zoteroItemKey;
+    }
+
     const folder = this.plugin.settings.literatureNoteFolder?.trim() ?? '';
     const filename = `@${citekey}.md`;
     const notePath = folder ? normalizePath(`${folder}/${filename}`) : filename;
@@ -936,16 +949,19 @@ export class BibManager {
       return;
     }
 
-    const frontmatter = [
+    const lines = [
       '---',
       `citekey: ${citekey}`,
+      ...(zoteroKeyField ? [`zotero-key: ${zoteroKeyField}`] : []),
       `title: "${title.replace(/"/g, '\\"')}"`,
       `year: ${year}`,
-      authors.length ? `authors:\n${authors.map((a) => `  - "${a}"`).join('\n')}` : '',
+      ...(authors.length
+        ? [`authors:`, ...authors.map((a) => `  - "${a}"`)]
+        : []),
       '---',
-    ].filter(Boolean).join('\n');
+    ];
 
-    const content = `${frontmatter}\n\n# ${title}\n\n`;
+    const content = `${lines.join('\n')}\n\n# ${title}\n\n`;
 
     if (folder && !(await app.vault.adapter.exists(normalizePath(folder)))) {
       await app.vault.adapter.mkdir(normalizePath(folder));

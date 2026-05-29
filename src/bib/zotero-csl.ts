@@ -140,8 +140,11 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   if (data.conferenceName) csl['event-title'] = data.conferenceName;
   if (data.section) csl.section = data.section;
 
-  // Internal metadata — not a CSL field, used for cross-group deduplication.
+  // Internal metadata — not CSL fields.
   if (data.dateModified) csl._dateModified = data.dateModified;
+  // item.key is the 8-char Zotero item key (top-level, not inside data).
+  // ZotLit needs this to index a literature note via the "zotero-key" frontmatter field.
+  if (item.key) csl._zoteroKey = item.key;
 
   return csl as PartialCSLEntry;
 }
