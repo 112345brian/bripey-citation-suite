@@ -2,6 +2,7 @@ import { Platform, PluginSettingTab, Setting } from 'obsidian';
 
 import { t } from './lang/helpers';
 import { findPandoc } from './bib/pandoc';
+import { getBibPath } from './bib/helpers';
 import { isZotLitSuggestActive } from './zotlit';
 import ReferenceList from './main';
 import ReactDOM from 'react-dom';
@@ -9,6 +10,7 @@ import React from 'react';
 import { SettingItem } from './settings/SettingItem';
 import { SearchSelect } from './settings/SearchSelect';
 import { searchCSL, searchCSLLangs } from './settings/select.helpers';
+import { FolderSuggest } from './settings/FolderSuggest';
 import { cslListRaw } from './bib/cslList';
 import { langListRaw } from './bib/cslLangList';
 import { ZoteroPullSetting } from './settings/ZoteroPullSetting';
@@ -116,7 +118,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Path to bibliography file'))
       .setDesc(
         t(
-          'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. Can be overridden per-note via the "bibliography" frontmatter key.'
+          'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. On blur, the path is resolved and normalised to the most portable form (vault-relative when the file is inside the vault). Can be overridden per-note via the "bibliography" frontmatter key.'
         )
       )
       .then((setting) => {
@@ -129,6 +131,23 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
                 this.plugin.bibManager.reinit(true)
               );
             });
+
+          // On blur, resolve the path and normalise it to the canonical form.
+          // For example, an absolute path inside the vault becomes vault-relative.
+          text.inputEl.addEventListener('blur', async () => {
+            const raw = text.inputEl.value.trim();
+            if (!raw) return;
+            try {
+              const resolved = await getBibPath(raw);
+              if (resolved !== raw) {
+                text.setValue(resolved);
+                this.plugin.settings.pathToBibliography = resolved;
+                this.plugin.saveSettings();
+              }
+            } catch {
+              // Path unresolvable — leave as-is so the user can see and fix it.
+            }
+          });
         });
       });
 
@@ -227,15 +246,16 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           'Folder where new literature notes are created (vault-relative). Leave blank to create at the vault root. A "Create literature note" button appears on sidebar entries when no note exists. Has no effect when ZotLit is installed — use ZotLit\'s template system instead.'
         )
       )
-      .addText((text) =>
+      .addText((text) => {
         text
           .setPlaceholder('Literature Notes')
           .setValue(this.plugin.settings.literatureNoteFolder ?? '')
           .onChange((value) => {
             this.plugin.settings.literatureNoteFolder = value;
             this.plugin.saveSettings();
-          })
-      );
+          });
+        new FolderSuggest(this.app, text.inputEl);
+      });
 
     new Setting(containerEl)
       .setName(t('Hide links in references'))

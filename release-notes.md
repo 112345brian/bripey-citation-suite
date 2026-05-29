@@ -1,3 +1,9 @@
+## 2.0.35
+
+- **Literature notes folder autocomplete:** typing in the literature notes folder field now shows a dropdown of existing vault folders.
+- **Bibliography path: relative ↔ absolute resolution:** the plugin now tries both path forms when loading your `.bib` file — if you enter an absolute path that lives inside the vault, it is automatically normalised to the portable vault-relative form on blur. If the vault has moved since the path was saved, the absolute fallback (vault root + relative path) is tried automatically and the setting is updated to the form that actually works.
+- **Windows Pandoc detection:** added detection for winget (`%LOCALAPPDATA%\Pandoc`), Scoop (`%USERPROFILE%\scoop\apps\pandoc\current`), and Chocolatey (`%ProgramData%\chocolatey\bin`) install locations.
+
 ## 2.0.34
 
 - **BibTeX crash fix:** entries with no author/editor (e.g. `@online`, `@misc` without a `creators` field) no longer crash the bibliography loader — they load correctly with no author.

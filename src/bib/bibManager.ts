@@ -6,6 +6,7 @@ import Fuse from 'fuse.js';
 import {
   bibPathsToCSL,
   bibToCSL,
+  getBibPath,
   getCSLLocale,
   getCSLStyle,
   isAbsolutePath,
@@ -347,18 +348,39 @@ export class BibManager {
     const { settings } = this.plugin;
     if (!settings.pathToBibliography) return;
 
+    // Resolve the path first — getBibPath may return a different (canonical)
+    // form, e.g. vault-relative instead of absolute when the file lives inside
+    // the vault, or an absolute fallback if the vault-relative lookup fails.
+    let resolved: string;
+    try {
+      resolved = await getBibPath(settings.pathToBibliography);
+    } catch (e) {
+      console.error('bripey-citation-suite: cannot resolve .bib path:', e);
+      return;
+    }
+
     let bib: PartialCSLEntry[];
     try {
-      bib = await bibToCSL(settings.pathToBibliography, settings.pathToPandoc);
+      // Pass the already-resolved path so bibToCSL skips a redundant getBibPath call.
+      bib = await bibToCSL(resolved, settings.pathToPandoc);
     } catch (e) {
       console.error('bripey-citation-suite: failed to load .bib file:', e);
       return;
     }
 
-    // Register for change watching (vault-relative only).
-    const bibNorm = normalizePath(settings.pathToBibliography);
-    if (!isAbsolutePath(settings.pathToBibliography)) {
-      this.globalWatchedBibPaths.add(bibNorm);
+    // If getBibPath normalised the path (e.g. absolute → vault-relative), persist
+    // the canonical form so future loads and the settings UI stay in sync.
+    if (resolved !== settings.pathToBibliography) {
+      console.info(
+        `bripey-citation-suite: normalised bib path "${settings.pathToBibliography}" → "${resolved}"`
+      );
+      settings.pathToBibliography = resolved;
+      this.plugin.saveSettings();
+    }
+
+    // Register for change watching (vault-relative paths only).
+    if (!isAbsolutePath(resolved)) {
+      this.globalWatchedBibPaths.add(normalizePath(resolved));
       this.rebuildWatchedBibPaths();
     }
 
