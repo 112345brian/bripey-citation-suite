@@ -68,11 +68,27 @@ export async function findPandoc(): Promise<string | null> {
   }
 
   // Common install locations to try directly.
+  // On Windows we resolve %LOCALAPPDATA%, %APPDATA%, %USERPROFILE%, and
+  // %ProgramData% from process.env so the paths work for any user account.
+  const env = (globalThis.process?.env ?? {}) as Record<string, string | undefined>;
+
   const candidates =
     platform === 'win32'
       ? [
+          // MSI installer (system-wide, 64-bit)
           'C:\\Program Files\\Pandoc\\pandoc.exe',
+          // MSI installer (system-wide, 32-bit on 64-bit Windows)
           'C:\\Program Files (x86)\\Pandoc\\pandoc.exe',
+          // winget / manual per-user install (%LOCALAPPDATA%\Pandoc)
+          ...(env.LOCALAPPDATA ? [`${env.LOCALAPPDATA}\\Pandoc\\pandoc.exe`] : []),
+          // Scoop (%USERPROFILE%\scoop\apps\pandoc\current)
+          ...(env.USERPROFILE
+            ? [`${env.USERPROFILE}\\scoop\\apps\\pandoc\\current\\pandoc.exe`]
+            : []),
+          // Chocolatey (%ProgramData%\chocolatey\bin)
+          ...(env.ProgramData
+            ? [`${env.ProgramData}\\chocolatey\\bin\\pandoc.exe`]
+            : []),
         ]
       : [
           '/opt/homebrew/bin/pandoc', // Apple Silicon Homebrew

@@ -37,13 +37,55 @@ async function readFileText(filePath: string): Promise<string> {
 
 // ─── Bibliography file resolution ───────────────────────────────────────────
 
-// Resolve a configured bibliography path to a form we can read.
-// Priority: absolute path → vault-relative path → vault-root-relative path.
+/**
+ * Resolve a stored bibliography path to a form we can read, trying both
+ * absolute and vault-relative forms so the plugin survives a vault move or an
+ * absolute path that is really inside the vault.
+ *
+ * Resolution order:
+ *  1. Absolute path inside vault → return vault-relative form (more portable).
+ *  2. Absolute path outside vault → return as-is.
+ *  3. Vault-relative path that exists → return normalized.
+ *  4. Vault-relative path missing → try prepending the vault root (absolute).
+ *
+ * The returned path may differ from the input; callers that want to persist
+ * the canonical form should compare the two and save if different.
+ */
 export async function getBibPath(bibPath: string): Promise<string> {
-  if (isAbsolutePath(bibPath)) return bibPath;
+  const adapter = app.vault.adapter;
+  // getBasePath() is only available on desktop (FileSystemAdapter).
+  const vaultBase: string | undefined =
+    typeof (adapter as any).getBasePath === 'function'
+      ? ((adapter as any).getBasePath() as string)
+      : undefined;
+  const fwd = (p: string) => p.replace(/\\/g, '/'); // normalise Windows separators
 
+  if (isAbsolutePath(bibPath)) {
+    // If the file lives inside the vault, prefer the portable vault-relative form.
+    if (vaultBase) {
+      const absForward = fwd(bibPath);
+      const baseForward = fwd(vaultBase).replace(/\/+$/, '');
+      if (absForward.startsWith(baseForward + '/')) {
+        const rel = normalizePath(absForward.slice(baseForward.length + 1));
+        if (await adapter.exists(rel)) return rel;
+        // File should be here but isn't — fall through to use the absolute path
+        // so the subsequent read surfaces a meaningful OS-level error.
+      }
+    }
+    // Outside vault, or vault base not available (mobile) — return as-is.
+    return bibPath;
+  }
+
+  // Vault-relative path.
   const normalized = normalizePath(bibPath);
-  if (await app.vault.adapter.exists(normalized)) return normalized;
+  if (await adapter.exists(normalized)) return normalized;
+
+  // Fallback: prepend vault root in case the path is correct but the vault
+  // has moved to a new location since the setting was saved.
+  if (vaultBase) {
+    return fwd(vaultBase).replace(/\/+$/, '') + '/' + fwd(bibPath);
+    // readFileText will surface a clear error if this also fails to exist.
+  }
 
   throw new Error(
     `bripey-citation-suite: cannot find bibliography file "${bibPath}". ` +
