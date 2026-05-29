@@ -2,7 +2,7 @@ import { PartialCSLEntry } from './types';
 
 // Pure Zotero-item-to-CSL-JSON conversion. No I/O, no Obsidian deps.
 
-const ZOTERO_TYPE_TO_CSL: Record<string, string> = {
+export const ZOTERO_TYPE_TO_CSL: Record<string, string> = {
   artwork: 'graphic',
   audioRecording: 'song',
   bill: 'bill',
@@ -28,11 +28,14 @@ const ZOTERO_TYPE_TO_CSL: Record<string, string> = {
   manuscript: 'manuscript',
   map: 'map',
   newspaperArticle: 'article-newspaper',
+  note: 'document',
   patent: 'patent',
   podcast: 'broadcast',
+  preprint: 'article',
   presentation: 'speech',
   radioBroadcast: 'broadcast',
   report: 'report',
+  standard: 'standard',
   statute: 'legislation',
   thesis: 'thesis',
   tvBroadcast: 'broadcast',

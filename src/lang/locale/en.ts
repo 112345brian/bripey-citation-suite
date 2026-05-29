@@ -57,8 +57,8 @@ export default {
   'Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.':
     'Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.',
   // src/view.ts
-  'Please provide the path to pandoc in the Pandoc Reference List plugin settings.':
-    'Please provide the path to pandoc in the Pandoc Reference List plugin settings.',
+  'Please provide the path to Pandoc in the Bripey Citation Suite plugin settings.':
+    'Please provide the path to Pandoc in the Bripey Citation Suite plugin settings.',
   'Click to copy': 'Click to copy',
   'Copy list': 'Copy list',
   'No citations found in the current document.':
@@ -72,10 +72,10 @@ export default {
   'Start Zotero and try again.': 'Start Zotero and try again.',
   'Libraries to include in bibliography':
     'Libraries to include in bibliography',
-  'Please provide the path to your pandoc compatible bibliography file in the Pandoc Reference List plugin settings.':
-    'Please provide the path to your pandoc compatible bibliography file in the Pandoc Reference List plugin settings.',
+  'Please provide the path to your bibliography file in the Bripey Citation Suite plugin settings.':
+    'Please provide the path to your bibliography file in the Bripey Citation Suite plugin settings.',
   'Refresh bibliography': 'Refresh bibliography',
-  'Pandoc reference list settings': 'Pandoc reference list settings',
+  'Bripey Citation Suite settings': 'Bripey Citation Suite settings',
   // src/tooltip.ts
   'No citation found for ': 'No citation found for ',
 

@@ -4,7 +4,7 @@
 - Build: `yarn build` (production minified) / `yarn dev` (watch mode)
 - Test: `yarn test` (Jest + jsdom — Zotero tests require a live Zotero instance)
 - Lint/Format: `yarn lint` / `yarn prettier` / `yarn clean` (both)
-- Run/Dev: copy `main.js`, `manifest.json`, `styles.css` into your vault's `.obsidian/plugins/obsidian-pandoc-reference-list/` after building
+- Run/Dev: copy `main.js`, `manifest.json`, `styles.css` into your vault's `.obsidian/plugins/bripey-citation-suite/` after building
 
 ## Stack
 - TypeScript 5.x (compiled by esbuild, type-checked by `tsc --noemit`)

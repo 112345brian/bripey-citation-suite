@@ -67,7 +67,7 @@ function getExt(filePath: string): string {
 export function parseBibTeX(raw: string): PartialCSLEntry[] {
   const options: BibTeXParser.ParserOptions = {
     errorHandler: (err) => {
-      console.warn('pandoc-reference-list: BibTeX parse warning:', err);
+      console.warn('bripey-citation-suite: BibTeX parse warning:', err);
     },
   };
 
@@ -75,7 +75,7 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
 
   parsed.errors.forEach((e) => {
     console.error(
-      `pandoc-reference-list: BibTeX parse error (line ${e.line}, col ${e.column}):`,
+      `bripey-citation-suite: BibTeX parse error (line ${e.line}, col ${e.column}):`,
       e.message
     );
   });

@@ -147,13 +147,36 @@ function onlyValType(segs: Segment[]) {
   return segs.map((s) => ({ type: s.type, val: s.val }));
 }
 
+function getCitationSignature(view: EditorView) {
+  const {
+    plugin: { settings },
+  } = view.state.field(bibManagerField);
+
+  const segments = getCitationSegments(
+    view.state.doc.toString(),
+    !settings.renderLinkCitations
+  );
+
+  return JSON.stringify(segments.map(onlyValType));
+}
+
 export const citeKeyPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    citationSignature: string;
     constructor(view: EditorView) {
+      this.citationSignature = getCitationSignature(view);
       this.decorations = this.mkDeco(view);
     }
     update(update: ViewUpdate) {
+      if (update.docChanged) {
+        const nextSignature = getCitationSignature(update.view);
+        if (nextSignature !== this.citationSignature) {
+          this.citationSignature = nextSignature;
+          update.view.state.field(bibManagerField).plugin.processReferences();
+        }
+      }
+
       if (
         update.viewportChanged ||
         update.docChanged ||

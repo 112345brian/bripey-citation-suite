@@ -46,7 +46,7 @@ export async function getBibPath(bibPath: string): Promise<string> {
   if (await app.vault.adapter.exists(normalized)) return normalized;
 
   throw new Error(
-    `pandoc-reference-list: cannot find bibliography file "${bibPath}". ` +
+    `bripey-citation-suite: cannot find bibliography file "${bibPath}". ` +
       'Provide an absolute path or a path relative to the vault root.'
   );
 }
@@ -65,7 +65,7 @@ export async function bibToCSL(
       return await bibToCSLViaPandoc(resolved, pathToPandoc);
     } catch (e) {
       console.warn(
-        'pandoc-reference-list: Pandoc failed, falling back to JS parser:',
+        'bripey-citation-suite: Pandoc failed, falling back to JS parser:',
         e
       );
     }
@@ -381,7 +381,7 @@ export async function getZUserGroupsNative(
       }
     }
   } catch (e) {
-    console.error('pandoc-reference-list: error fetching Zotero groups:', e);
+    console.error('bripey-citation-suite: error fetching Zotero groups:', e);
   }
 
   return groups;
