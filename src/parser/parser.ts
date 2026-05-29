@@ -635,9 +635,36 @@ export function getCitationSegments(str: string, ignoreLinks: boolean = false) {
       }
 
       if (c === ';') {
-        state.shouldCancelSeek = false;
-        endCurrent(i);
-        state.currentSegment = newCurrent(i, c, SegmentType.separator);
+        // Only treat as a citation separator when an '@' (or '-@') follows
+        // before the bracket closes. A semicolon with no subsequent citation
+        // key is suffix/note text, not a separator — matching pandoc's behaviour
+        // and fixing the case where users write prose like "[@key, see Smith; cf. Jones]".
+        let j = i + 1;
+        let hasFollowingKey = false;
+        let depth = state.bracketDepth;
+        for (; j < str.length; j++) {
+          if (str[j] === '[') depth++;
+          else if (str[j] === ']') {
+            if (--depth === 0) break;
+          } else if (str[j] === '@') {
+            hasFollowingKey = true;
+            break;
+          }
+        }
+        if (hasFollowingKey) {
+          state.shouldCancelSeek = false;
+          endCurrent(i);
+          state.currentSegment = newCurrent(i, c, SegmentType.separator);
+        } else if (state.inKey) {
+          // ';' immediately after the key with no following citation: start a suffix
+          endCurrent(i);
+          state.inKey = false;
+          state.inSuffix = true;
+          state.seekingLocator = false;
+          state.currentSegment = newCurrent(i, c, SegmentType.suffix);
+        } else {
+          state.currentSegment.val += c;
+        }
         continue;
       }
 
