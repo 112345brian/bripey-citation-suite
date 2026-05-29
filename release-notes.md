@@ -1,3 +1,7 @@
+## 2.0.45
+
+- **Mobile editor: hold-to-select works correctly when cursor is already on a citekey.** In 2.0.44, long-pressing a citation span always showed the citation card — even if your cursor was already placed inside it, where the expected behavior is native word selection. Now, if the editor cursor is already inside the span when you start the hold, the long-press timer is skipped and the OS handles selection normally. Long-pressing a citation span where the cursor is *not* yet placed still shows the citation card after ~500 ms.
+
 ## 2.0.44
 
 - **Mobile editor: tap to edit, long-press to show citation.** Previously, tapping a rendered citation in live-preview mode would immediately show the citation card (or copy/link, depending on your setting), making it impossible to tap to place the cursor for editing. Now, a quick tap in the editor behaves normally — the cursor moves to where you tapped. Holding for ~500 ms triggers the configured tap action (show card, copy, or open link). Scrolling or moving your finger during the hold cancels it cleanly without triggering the action.

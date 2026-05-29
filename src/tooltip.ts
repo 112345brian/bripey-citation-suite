@@ -349,6 +349,15 @@ export class TooltipManager {
           target.classList?.contains('is-link')
         ) return;
 
+        // If the cursor is already inside this span the user is doing a
+        // hold-to-select gesture — let the OS handle native text selection.
+        const doc = target.ownerDocument ?? document;
+        const sel = doc.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const anchor = sel.getRangeAt(0).commonAncestorContainer;
+          if (target.contains(anchor)) return;
+        }
+
         lpTarget = target;
         lpFired = false;
         lpStartX = evt.clientX;
