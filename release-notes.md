@@ -1,3 +1,7 @@
+## 2.1.2
+
+- **Fix: citekey autocomplete and hover tooltips were off by default.** `enableCiteKeyCompletion` and `showCitekeyTooltips` were not included in `DEFAULT_SETTINGS`, so both defaulted to `undefined` (falsy) for any fresh install — meaning `@key` suggestions never appeared and hover tooltips never showed unless you had previously toggled them on explicitly. Both now default to enabled.
+
 ## 2.1.1
 
 - **Fix: copy button in the reference sidebar was broken on desktop.** The "Copy list" button (and any other clipboard operation) threw a module resolution error because `await import('electron')` is left verbatim by esbuild 0.13.x in CJS output, which Electron's renderer can't resolve as an ES module. Replaced with synchronous `require('electron')` — same fix as the earlier Pandoc `child_process` crash.
