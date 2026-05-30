@@ -1,3 +1,7 @@
+## 2.1.7
+
+- **Debug build** — added `[CiteSuggest]` console logging to trace exactly where autocomplete is failing. Open the developer console (Ctrl/Cmd+Shift+I), type a few characters after `@`, and screenshot the debug output.
+
 ## 2.1.6
 
 - **Fix: citekey suggestions suppressed when ZotLit is installed.** The plugin previously yielded all `[@key` completions to ZotLit when it detected ZotLit was active. The problem: ZotLit sets `globalThis.zoteroAPI` when its plugin loads — regardless of whether Zotero is actually running — so we were silently returning no suggestions whenever ZotLit was present, even when ZotLit had nothing to show. Both suggesters now run; whichever has data wins.
