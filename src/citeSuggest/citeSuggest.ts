@@ -80,7 +80,10 @@ export class CiteSuggest extends EditorSuggest<
     }
 
     const { plugin } = this;
-    if (!plugin.initPromise.settled) return null;
+    if (!plugin.initPromise.settled) {
+      console.debug('[CiteSuggest] initPromise not settled yet');
+      return null;
+    }
 
     const { bibManager } = plugin;
 
@@ -94,9 +97,15 @@ export class CiteSuggest extends EditorSuggest<
       fuse = cache.source.fuse ?? bibManager.fuse;
     }
 
+    console.debug(
+      `[CiteSuggest] query="${context.query}" fuse=${fuse ? `ok (${(fuse as any)._docs?.length ?? '?'} entries)` : 'NULL'}`
+    );
+
     const results = fuse?.search(context.query, {
       limit: this.limit,
     });
+
+    console.debug(`[CiteSuggest] results: ${results?.length ?? 0}`);
 
     return results?.length ? results : null;
   }
@@ -220,7 +229,12 @@ export class CiteSuggest extends EditorSuggest<
     const line = (editor.getLine(cursor.line) || '').substring(0, cursor.ch);
     const match = line.match(triggerRE);
 
-    if (!match) return null;
+    if (!match) {
+      console.debug(`[CiteSuggest] no trigger match for: ${JSON.stringify(line)}`);
+      return null;
+    }
+    console.debug(`[CiteSuggest] triggered, query="${match[3]}" char-before="${match[1]}"`);
+
     this.lastSelect = null;
 
     // Previously we yielded the [@key context to ZotLit when it was active, to
