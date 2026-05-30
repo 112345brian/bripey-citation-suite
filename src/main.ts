@@ -147,19 +147,35 @@ export default class ReferenceList extends Plugin {
 
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
+
+    console.log('[bcs:main] loaded settings:', JSON.stringify({
+      pathToBibliography: this.settings.pathToBibliography,
+      pullFromZotero: this.settings.pullFromZotero,
+      zoteroGroups: this.settings.zoteroGroups,
+      useNativeZoteroAPI: this.settings.useNativeZoteroAPI,
+      zoteroPort: this.settings.zoteroPort,
+      enableCiteKeyCompletion: this.settings.enableCiteKeyCompletion,
+    }));
+
     this.initPromise.promise
       .then(async () => {
         const { settings, bibManager } = this;
+        console.log('[bcs:main] initPromise.then fired — starting bib load');
         // Load sources in priority order: .bib first (lower priority),
         // Zotero on top (higher priority, wins on conflicts).
         if (settings.pathToBibliography) {
           await bibManager.loadGlobalBibFile();
+        } else {
+          console.log('[bcs:main] pathToBibliography not set, skipping .bib load');
         }
         if (settings.pullFromZotero) {
           await bibManager.loadAndRefreshGlobalZBib();
+        } else {
+          console.log('[bcs:main] pullFromZotero not set, skipping Zotero load');
         }
         // Build the CSL engine once, after all sources are merged.
         await bibManager.buildGlobalEngine();
+        console.log('[bcs:main] bib load complete, bibManager.initPromise resolving');
         // Incremental Zotero refresh runs async after the engine is ready.
         if (settings.pullFromZotero) {
           bibManager.refreshGlobalZBib().catch(console.error);

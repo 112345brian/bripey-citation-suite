@@ -16,6 +16,8 @@ import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
 export { isZotLitSuggestActive }; // re-exported for settings.tsx
 
+const LOG = (...args: any[]) => console.log('[bcs:suggest]', ...args);
+
 // Returns a compact metadata string for a CSL entry: "Smith · 2020 · Nature"
 function getEntryMeta(item: PartialCSLEntry): string {
   const e = item as any;
@@ -47,6 +49,8 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     this.app = app;
     this.plugin = plugin;
 
+    LOG('CiteSuggest constructed');
+
     (this as any).suggestEl.addClass('bcs-suggest');
     (this as any).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
       (this as any).suggestions.useSelectedItem(evt);
@@ -73,45 +77,67 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   async getSuggestions(
     context: EditorSuggestContext
   ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
+    LOG('getSuggestions called, query=', JSON.stringify(context.query));
+
     if (!context.query || context.query.includes(' ')) {
+      LOG('getSuggestions: bailing — empty query or contains space');
       return [];
     }
 
     const { plugin } = this;
+    LOG('initPromise.settled =', plugin.initPromise.settled);
     if (!plugin.initPromise.settled) {
+      LOG('getSuggestions: bailing — initPromise not settled');
       return [];
     }
 
     const { bibManager } = plugin;
+    LOG('bibManager.fuse =', bibManager.fuse ? `Fuse(${(bibManager.fuse as any)._docs?.length ?? '?'} docs)` : 'null');
+    LOG('bibManager.bibCache.size =', bibManager.bibCache?.size ?? 'N/A');
 
     // Use the per-file fuse index when the note has a frontmatter bibliography,
     // but fall back to the global index if the per-file one is null — this
     // happens when the fileCache entry was created before the global bib finished
     // loading (race condition on startup).
     let fuse = bibManager.fuse;
-    if (bibManager.fileCache.has(context.file)) {
+    const hasFileCache = bibManager.fileCache.has(context.file);
+    LOG('fileCache has this file =', hasFileCache);
+    if (hasFileCache) {
       const cache = bibManager.fileCache.get(context.file);
+      LOG('  per-file fuse =', cache.source.fuse ? `Fuse(${(cache.source.fuse as any)._docs?.length ?? '?'} docs)` : 'null');
       fuse = cache.source.fuse ?? bibManager.fuse;
     }
 
+    LOG('using fuse =', fuse ? `Fuse(${(fuse as any)._docs?.length ?? '?'} docs)` : 'null');
     const fuseResults = fuse?.search(context.query, { limit: this.limit });
+    LOG('fuse.search results =', fuseResults?.length ?? 0);
     if (fuseResults?.length) return fuseResults;
 
     // Fuse returned nothing (index empty or no match) — fall back to a live
     // Zotero query, mirroring ZotLit's approach. This works even when no groups
     // have been pre-loaded into the fuse index, as long as Zotero is running.
     const { settings } = plugin;
+    LOG('settings.pullFromZotero =', settings.pullFromZotero);
+    LOG('settings.zoteroGroups =', JSON.stringify(settings.zoteroGroups));
+    LOG('settings.useNativeZoteroAPI =', settings.useNativeZoteroAPI);
+    LOG('query.length =', context.query.length);
+
     if (settings.pullFromZotero && context.query.length >= 2) {
       const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
       const groupIds = settings.zoteroGroups?.map((g) => g.id) ?? [];
+      LOG('falling back to live Zotero search, port=', port, 'groupIds=', groupIds);
       try {
         const items = await searchZoteroNative(port, context.query, groupIds, this.limit);
+        LOG('live Zotero search returned', items.length, 'items');
         return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
-      } catch {
-        // Zotero not running or native API unavailable — silently return empty.
+      } catch (e) {
+        LOG('live Zotero search threw:', e);
       }
+    } else {
+      LOG('skipping Zotero fallback: pullFromZotero=', settings.pullFromZotero, 'queryLen=', context.query.length);
     }
 
+    LOG('getSuggestions: returning empty');
     return [];
   }
 
@@ -209,8 +235,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
   onTrigger(cursor: EditorPosition, editor: Editor): EditorSuggestTriggerInfo {
     const { enableCiteKeyCompletion, pullFromZotero } = this.plugin.settings;
+
     // Only block if *explicitly* disabled — undefined (never set) means enabled.
-    if (enableCiteKeyCompletion === false) return null;
+    if (enableCiteKeyCompletion === false) {
+      LOG('onTrigger: blocked by enableCiteKeyCompletion === false');
+      return null;
+    }
 
     const { lastSelect } = this;
     if (
@@ -218,7 +248,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       cursor.ch === lastSelect.ch &&
       cursor.line === lastSelect.line
     ) {
-      return null;
+      return null; // suppress re-trigger right after a selection
     }
 
     const line = (editor.getLine(cursor.line) || '').substring(0, cursor.ch);
@@ -228,15 +258,9 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       return null;
     }
 
-    this.lastSelect = null;
+    LOG('onTrigger: matched, query=', match[3], 'char-before=', JSON.stringify(match[1]));
 
-    // Previously we yielded the [@key context to ZotLit when it was active, to
-    // avoid duplicate popups. In practice, ZotLit sets globalThis.zoteroAPI when
-    // the plugin loads — not only when Zotero is connected — so we were silently
-    // suppressing our own completions even when ZotLit had nothing to show.
-    // We now always run; if ZotLit is also active its suggester will compete and
-    // Obsidian will show whichever fires first. Users who want ZotLit-only
-    // bracket completions can disable ours in settings.
+    this.lastSelect = null;
 
     if (!this.context && pullFromZotero) {
       this.refreshZBib();

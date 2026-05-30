@@ -1,3 +1,7 @@
+## 2.2.1
+
+- **Debug build** — comprehensive `[bcs:*]` console logging added at every stage of the suggestion pipeline. Open the developer console (Ctrl/Cmd+Shift+I) and look for `[bcs:main]`, `[bcs:bib]`, `[bcs:suggest]`, and `[bcs:zotero-search]` prefixes. Loading Obsidian will log the active settings and bib-load sequence; typing `@de` will log exactly where the suggestion flow stops.
+
 ## 2.2.0
 
 - **Fix: citekey autocomplete now works without any configuration.** Previously, suggestions only appeared if you had either a `.bib` file path set *or* Zotero groups explicitly selected in settings — if neither was done, the fuse index was empty and nothing ever appeared. The plugin now mirrors ZotLit's approach: `getSuggestions` is async and, when the fuse index returns nothing, falls back to a live Zotero native API query (`/api/.../items?q=…`). As long as Zotero is running and `Pull from Zotero` is enabled in settings, typing `@de` will show matching items from your library in real time — no group selection required.

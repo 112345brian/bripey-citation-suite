@@ -655,19 +655,27 @@ export async function searchZoteroNative(
   const targets = groupIds.length ? groupIds : [1];
   const results: PartialCSLEntry[] = [];
 
+  console.log('[bcs:zotero-search] searchZoteroNative called, port=', port, 'query=', query, 'targets=', targets);
+
   for (const groupId of targets) {
     const libraryType = groupId === 1 ? 'users' : 'groups';
     const libraryId = groupId === 1 ? 0 : groupId;
-    const { data } = await zoteroNativeGet(
-      port,
-      `/api/${libraryType}/${libraryId}/items?q=${encoded}&format=json&itemType=-attachment&limit=${limit}`
-    );
-    if (!Array.isArray(data)) continue;
-    for (const item of data) {
-      const cslItem = _zoteroItemToCSL(item, groupId);
-      if (cslItem) results.push(cslItem);
+    const url = `/api/${libraryType}/${libraryId}/items?q=${encoded}&format=json&itemType=-attachment&limit=${limit}`;
+    console.log('[bcs:zotero-search] GET', `http://127.0.0.1:${port}${url}`);
+    try {
+      const { data } = await zoteroNativeGet(port, url);
+      console.log('[bcs:zotero-search] response type=', typeof data, Array.isArray(data) ? `array[${data.length}]` : String(data)?.slice(0, 100));
+      if (!Array.isArray(data)) continue;
+      for (const item of data) {
+        const cslItem = _zoteroItemToCSL(item, groupId);
+        if (cslItem) results.push(cslItem);
+      }
+    } catch (e) {
+      console.log('[bcs:zotero-search] request threw:', e);
+      throw e;
     }
   }
 
+  console.log('[bcs:zotero-search] returning', results.length, 'CSL items');
   return results;
 }
