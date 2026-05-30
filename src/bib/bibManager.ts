@@ -346,7 +346,11 @@ export class BibManager {
   // Does not build the CSL engine — call buildGlobalEngine() after all sources load.
   async loadGlobalBibFile() {
     const { settings } = this.plugin;
-    if (!settings.pathToBibliography) return;
+    console.log('[bcs:bib] loadGlobalBibFile, pathToBibliography=', settings.pathToBibliography);
+    if (!settings.pathToBibliography) {
+      console.log('[bcs:bib] no pathToBibliography set — skipping .bib load');
+      return;
+    }
 
     // Resolve the path first — getBibPath may return a different (canonical)
     // form, e.g. vault-relative instead of absolute when the file lives inside
@@ -354,6 +358,7 @@ export class BibManager {
     let resolved: string;
     try {
       resolved = await getBibPath(settings.pathToBibliography);
+      console.log('[bcs:bib] resolved bib path =', resolved);
     } catch (e) {
       console.error('bripey-citation-suite: cannot resolve .bib path:', e);
       return;
@@ -363,6 +368,7 @@ export class BibManager {
     try {
       // Pass the already-resolved path so bibToCSL skips a redundant getBibPath call.
       bib = await bibToCSL(resolved, settings.pathToPandoc);
+      console.log('[bcs:bib] bibToCSL returned', bib?.length ?? 'null', 'entries');
     } catch (e) {
       console.error('bripey-citation-suite: failed to load .bib file:', e);
       return;
@@ -388,6 +394,7 @@ export class BibManager {
       this.bibCache.set(entry.id, { ...entry, _source: 'bib' });
       this.bibSourceKeys.add(entry.id);
     }
+    console.log('[bcs:bib] bibCache now has', this.bibCache.size, 'entries after .bib load');
   }
 
   getZoteroAdapter(): ZoteroAdapter {
@@ -412,12 +419,19 @@ export class BibManager {
   // appears in multiple groups. Does not build the CSL engine.
   async loadGlobalZBib(fromCache?: boolean) {
     const { settings } = this.plugin;
-    if (!settings.zoteroGroups?.length) return;
+    console.log('[bcs:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
+    if (!settings.zoteroGroups?.length) {
+      console.log('[bcs:bib] no zoteroGroups configured — skipping Zotero load');
+      return;
+    }
 
     const adapter = this.getZoteroAdapter();
+    console.log('[bcs:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
     for (const group of settings.zoteroGroups) {
       try {
+        console.log('[bcs:bib] fetching group', group.id, group.name);
         const res = await adapter.getBib('', group.id, fromCache);
+        console.log('[bcs:bib] group', group.id, 'returned', res.list?.length ?? 'null', 'entries');
         if (!res.list?.length) continue;
 
         if (!fromCache) {
@@ -433,6 +447,7 @@ export class BibManager {
       }
     }
 
+    console.log('[bcs:bib] bibCache now has', this.bibCache.size, 'entries after Zotero load');
     this.plugin.saveSettings();
   }
 
@@ -498,7 +513,9 @@ export class BibManager {
     const { settings } = this.plugin;
 
     // Rebuild the fuse search index from the merged cache.
+    console.log('[bcs:bib] buildGlobalEngine, bibCache.size=', this.bibCache.size);
     this.setFuse(Array.from(this.bibCache.values()));
+    console.log('[bcs:bib] fuse built with', (this.fuse as any)?._docs?.length ?? '?', 'docs');
 
     const style =
       settings.cslStylePath ||
