@@ -635,3 +635,39 @@ export async function getItemJSONFromCiteKeys(
     return null;
   }
 }
+
+/**
+ * Search Zotero (native API) for items matching `query`.
+ *
+ * Used for live autocomplete — like ZotLit, this queries Zotero in real-time
+ * so suggestions work even when no groups have been pre-loaded into the fuse
+ * index. When `groupIds` is empty, "My Library" (group 1) is searched.
+ *
+ * Throws if Zotero is unreachable — callers should catch.
+ */
+export async function searchZoteroNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  query: string,
+  groupIds: number[] = [],
+  limit = 20
+): Promise<PartialCSLEntry[]> {
+  const encoded = encodeURIComponent(query);
+  const targets = groupIds.length ? groupIds : [1];
+  const results: PartialCSLEntry[] = [];
+
+  for (const groupId of targets) {
+    const libraryType = groupId === 1 ? 'users' : 'groups';
+    const libraryId = groupId === 1 ? 0 : groupId;
+    const { data } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items?q=${encoded}&format=json&itemType=-attachment&limit=${limit}`
+    );
+    if (!Array.isArray(data)) continue;
+    for (const item of data) {
+      const cslItem = _zoteroItemToCSL(item, groupId);
+      if (cslItem) results.push(cslItem);
+    }
+  }
+
+  return results;
+}

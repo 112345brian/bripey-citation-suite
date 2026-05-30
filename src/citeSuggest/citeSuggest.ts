@@ -9,6 +9,8 @@ import {
   MarkdownView,
   Platform,
 } from 'obsidian';
+import { searchZoteroNative } from 'src/bib/helpers';
+import { DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -31,15 +33,9 @@ function getEntryMeta(item: PartialCSLEntry): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-interface Loading {
-  loading: boolean;
-}
-
 const triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 
-export class CiteSuggest extends EditorSuggest<
-  Fuse.FuseResult<PartialCSLEntry> | Loading
-> {
+export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>> {
   private plugin: ReferenceList;
   private app: App;
 
@@ -74,14 +70,16 @@ export class CiteSuggest extends EditorSuggest<
     ]);
   }
 
-  getSuggestions(context: EditorSuggestContext) {
+  async getSuggestions(
+    context: EditorSuggestContext
+  ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
     if (!context.query || context.query.includes(' ')) {
-      return null;
+      return [];
     }
 
     const { plugin } = this;
     if (!plugin.initPromise.settled) {
-      return null;
+      return [];
     }
 
     const { bibManager } = plugin;
@@ -96,31 +94,35 @@ export class CiteSuggest extends EditorSuggest<
       fuse = cache.source.fuse ?? bibManager.fuse;
     }
 
-    const results = fuse?.search(context.query, {
-      limit: this.limit,
-    });
+    const fuseResults = fuse?.search(context.query, { limit: this.limit });
+    if (fuseResults?.length) return fuseResults;
 
-    return results?.length ? results : null;
+    // Fuse returned nothing (index empty or no match) — fall back to a live
+    // Zotero query, mirroring ZotLit's approach. This works even when no groups
+    // have been pre-loaded into the fuse index, as long as Zotero is running.
+    const { settings } = plugin;
+    if (settings.pullFromZotero && context.query.length >= 2) {
+      const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+      const groupIds = settings.zoteroGroups?.map((g) => g.id) ?? [];
+      try {
+        const items = await searchZoteroNative(port, context.query, groupIds, this.limit);
+        return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
+      } catch {
+        // Zotero not running or native API unavailable — silently return empty.
+      }
+    }
+
+    return [];
   }
 
   renderSuggestion(
-    suggestion: Fuse.FuseResult<PartialCSLEntry> | Loading,
+    suggestion: Fuse.FuseResult<PartialCSLEntry>,
     el: HTMLElement
   ): void {
     const frag = createFragment();
+    const item = suggestion.item;
 
-    if ((suggestion as { loading: boolean }).loading) {
-      frag
-        .createSpan({ cls: 'bcs-suggest-loading-wrapper' })
-        .createSpan({ cls: 'bcs-suggest-loading' });
-      el.setText(frag);
-      return;
-    }
-
-    const sugg = suggestion as Fuse.FuseResult<PartialCSLEntry>;
-    const item = sugg.item;
-
-    if (!sugg.matches || !sugg.matches.length) {
+    if (!suggestion.matches || !suggestion.matches.length) {
       frag.createSpan({ text: `@${item.id}` });
       if (item.title)
         frag.createSpan({ text: item.title, cls: 'bcs-suggest-title' });
@@ -135,7 +137,7 @@ export class CiteSuggest extends EditorSuggest<
     let prevTitleIndex = 0;
     let prevCiteIndex = 0;
 
-    sugg.matches.forEach((m) => {
+    suggestion.matches.forEach((m) => {
       // Only highlight citekey (id) and title matches in the visible spans.
       if (m.key !== 'id' && m.key !== 'title') return;
       m.indices.forEach((indices) => {
