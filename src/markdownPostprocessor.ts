@@ -115,11 +115,11 @@ export function processCiteKeys(plugin: ReferenceList) {
           // If "link citations to literature notes" is on, treat the citekey
           // as a link — no lookup needed, same as [[citekey]].
           if (plugin.settings.renderCitationsAsLinks && rendered.citations.length) {
-            const citekey = rendered.citations[0].id;
+            const linkTarget = '@' + rendered.citations[0].id;
             span.addClass('is-link');
             span.addEventListener('click', (evt) => {
               const newPane = Keymap.isModEvent(evt);
-              plugin.app.workspace.openLinkText(citekey, ctx.sourcePath, newPane);
+              plugin.app.workspace.openLinkText(linkTarget, ctx.sourcePath, newPane);
             });
           }
 

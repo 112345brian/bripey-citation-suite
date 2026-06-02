@@ -254,7 +254,7 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
               if (!linkText && settings.renderCitationsAsLinks) {
                 for (const seg of match) {
                   if (seg.type === SegmentType.key) {
-                    linkText = seg.val;
+                    linkText = '@' + seg.val;
                     break;
                   }
                 }
