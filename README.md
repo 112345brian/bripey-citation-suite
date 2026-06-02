@@ -51,3 +51,17 @@ This fork incorporates changes from:
 Diacritic normalization approach credited to [akhmialeuski/obsidian-citation-extended](https://github.com/akhmialeuski/obsidian-citation-extended) (MIT).
 
 This fork was assembled with significant help from Claude (Anthropic). Bug diagnosis, cherry-pick selection, and most feature work were done in Claude Code sessions.
+
+---
+
+## My Other Plugins
+
+Like this plugin? I make a few others for Obsidian:
+
+- [**Bread Trail**](https://github.com/112345brian/bread-trail) — enhanced Breadcrumbs navigation
+- [**Breadbake**](https://github.com/112345brian/breadbake) — Breadcrumbs graph configuration
+- [**Inherit**](https://github.com/112345brian/inherit) — frontmatter property inheritance
+- [**Properties First**](https://github.com/112345brian/obsidian-properties-first) — move properties above the inline title
+- [**Return Headings**](https://github.com/112345brian/return-headings) — heading-return navigation markers
+
+Want to install them all at once? Check out [**obsidian-setup**](https://github.com/112345brian/obsidian-setup).
