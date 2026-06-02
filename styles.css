@@ -431,6 +431,12 @@ body {
   pointer-events: none;
 }
 
+.pandoc-citation.is-link > a.internal-link {
+  pointer-events: auto;
+  color: inherit;
+  text-decoration: inherit;
+}
+
 .bcs-decoration-preview {
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);

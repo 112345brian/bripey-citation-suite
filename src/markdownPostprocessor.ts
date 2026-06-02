@@ -1,4 +1,4 @@
-import { Keymap, MarkdownPostProcessorContext } from 'obsidian';
+import { MarkdownPostProcessorContext } from 'obsidian';
 
 import ReferenceList from './main';
 import { Segment, SegmentType, getCitationSegments } from './parser/parser';
@@ -112,15 +112,20 @@ export function processCiteKeys(plugin: ReferenceList) {
             span.append(node.cloneNode());
           }
 
-          // If "link citations to literature notes" is on, treat the citekey
-          // as a link — no lookup needed, same as [[citekey]].
+          // If "link citations to literature notes" is on, wrap the content in
+          // an <a class="internal-link"> so Obsidian's own reading-mode click
+          // handler navigates to the note (same mechanism as [[wikilinks]]).
           if (plugin.settings.renderCitationsAsLinks && rendered.citations.length) {
             const linkTarget = '@' + rendered.citations[0].id;
             span.addClass('is-link');
-            span.addEventListener('click', (evt) => {
-              const newPane = Keymap.isModEvent(evt);
-              plugin.app.workspace.openLinkText(linkTarget, ctx.sourcePath, newPane);
+            const a = span.createEl('a', {
+              cls: 'internal-link',
+              attr: { 'data-href': linkTarget, href: linkTarget },
             });
+            // Move span's children into the <a>
+            while (span.firstChild && span.firstChild !== a) {
+              a.insertBefore(span.firstChild, a.firstChild);
+            }
           }
 
           plugin.tooltipManager.bindPreviewTooltipHandler(span);

@@ -106,7 +106,11 @@ class CiteWidget extends WidgetType {
       (span) => {
         if (this.linkText) {
           span.addClass('is-link');
-          span.addEventListener('click', (evt) => {
+          // Use mousedown instead of click: in live preview CM synchronously
+          // removes the widget from the DOM on mousedown (cursor moves inside),
+          // so the click event never reaches our handler. Mousedown fires first.
+          span.addEventListener('mousedown', (evt) => {
+            if (evt.button !== 0) return;
             const newPane = Keymap.isModEvent(evt);
             activeWindow.setTimeout(() => {
               app.workspace.openLinkText(
@@ -114,7 +118,7 @@ class CiteWidget extends WidgetType {
                 this.sourcePath,
                 newPane
               );
-            }, 100);
+            }, 0);
           });
         }
 
