@@ -5,6 +5,7 @@ import {
   Menu,
   Modal,
   Notice,
+  Platform,
   Plugin,
   TAbstractFile,
   TFile,
@@ -214,10 +215,20 @@ export default class ReferenceList extends Plugin {
     this.initPromise.resolve();
     this.app.workspace.trigger('parse-style-settings');
 
-    // Open the reference panel if it isn't already present (e.g. first launch,
-    // or mobile where workspace state isn't always persisted between sessions).
+    // Auto-open the reference panel on first launch or on mobile (where workspace
+    // state isn't reliably persisted between sessions). On desktop after the first
+    // open we let the workspace manage the panel's lifecycle — if the user closed
+    // it we don't force it back open on every restart.
+    //
+    // We also guard against duplicate leaves: check getLeavesOfType() directly
+    // rather than this.view, because the view's instanceof check returns null while
+    // the workspace is still initializing a restored leaf (which would cause a
+    // second leaf to be created alongside the restored one).
     this.app.workspace.onLayoutReady(() => {
-      if (!this.view) this.initLeaf();
+      const hasLeaf = this.app.workspace.getLeavesOfType(viewType).length > 0;
+      if (!hasLeaf && (Platform.isMobile || !this.settings.panelAutoOpened)) {
+        this.initLeaf();
+      }
     });
 
     this.addCommand({
@@ -485,7 +496,12 @@ export default class ReferenceList extends Plugin {
   }
 
   async initLeaf() {
-    if (this.view) return this.revealLeaf();
+    // Guard against duplicates using getLeavesOfType rather than this.view:
+    // this.view's instanceof check returns null while the workspace is still
+    // initialising a restored leaf, which would otherwise create a second leaf.
+    if (this.app.workspace.getLeavesOfType(viewType).length) {
+      return this.revealLeaf();
+    }
 
     // getRightLeaf(false) can return null on mobile or when the workspace
     // isn't fully ready yet — guard before chaining .setViewState().
@@ -495,6 +511,13 @@ export default class ReferenceList extends Plugin {
     await leaf.setViewState({ type: viewType });
 
     this.revealLeaf();
+
+    // Remember that we've opened the panel at least once so that the
+    // onLayoutReady auto-open doesn't fire on every subsequent desktop restart.
+    if (!this.settings.panelAutoOpened) {
+      this.settings.panelAutoOpened = true;
+      this.saveSettings();
+    }
 
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;

@@ -71,6 +71,12 @@ export interface ReferenceListSettings {
    * Better BibTeX does not need to be installed when this is enabled.
    */
   useNativeZoteroAPI?: boolean;
+  /**
+   * Set to true after the reference panel has been auto-opened for the first
+   * time. Prevents the panel from re-opening on every subsequent desktop
+   * restart if the user closes it.
+   */
+  panelAutoOpened?: boolean;
 }
 
 const BIB_EXTENSIONS = new Set(['bib', 'json', 'yaml', 'yml']);
