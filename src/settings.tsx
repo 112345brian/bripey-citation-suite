@@ -58,6 +58,7 @@ export interface ReferenceListSettings {
   renderCitations?: boolean;
   renderCitationsReadingMode?: boolean;
   renderLinkCitations?: boolean;
+  renderCitationsAsLinks?: boolean;
 
   literatureNoteFolder?: string;
   /** Action to take when a citation is tapped on mobile (no hover available). */
@@ -410,6 +411,22 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.renderLinkCitations)
           .onChange((value) => {
             this.plugin.settings.renderLinkCitations = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Link citations to literature notes'))
+      .setDesc(
+        t(
+          'Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists — dead-link citations are not linked.'
+        )
+      )
+      .addToggle((text) =>
+        text
+          .setValue(!!this.plugin.settings.renderCitationsAsLinks)
+          .onChange((value) => {
+            this.plugin.settings.renderCitationsAsLinks = value;
             this.plugin.saveSettings();
           })
       );

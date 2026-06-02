@@ -90,6 +90,9 @@ export default {
   'Process citations in links': 'Process citations in links',
   'Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.':
     'Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.',
+  'Link citations to literature notes': 'Link citations to literature notes',
+  'Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists — dead-link citations are not linked.':
+    'Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists — dead-link citations are not linked.',
   // src/view.ts
   'Please provide the path to Pandoc in the Bripey Citation Suite plugin settings.':
     'Please provide the path to Pandoc in the Bripey Citation Suite plugin settings.',

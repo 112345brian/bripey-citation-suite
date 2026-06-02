@@ -1,4 +1,4 @@
-import { MarkdownPostProcessorContext } from 'obsidian';
+import { Keymap, MarkdownPostProcessorContext } from 'obsidian';
 
 import ReferenceList from './main';
 import { Segment, SegmentType, getCitationSegments } from './parser/parser';
@@ -110,6 +110,30 @@ export function processCiteKeys(plugin: ReferenceList) {
             }
           } else {
             span.append(node.cloneNode());
+          }
+
+          // If "link citations to literature notes" is on, make the span
+          // clickable — but only when a note actually exists for the citekey
+          // (no dead links). For multi-key citations we use the first resolved key.
+          if (plugin.settings.renderCitationsAsLinks) {
+            for (const cit of rendered.citations) {
+              const dest = plugin.app.metadataCache.getFirstLinkpathDest(
+                cit.id,
+                ctx.sourcePath
+              );
+              if (dest) {
+                span.addClass('is-link');
+                span.addEventListener('click', (evt) => {
+                  const newPane = Keymap.isModEvent(evt);
+                  plugin.app.workspace.openLinkText(
+                    cit.id,
+                    ctx.sourcePath,
+                    newPane
+                  );
+                });
+                break;
+              }
+            }
           }
 
           plugin.tooltipManager.bindPreviewTooltipHandler(span);

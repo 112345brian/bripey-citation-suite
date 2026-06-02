@@ -197,6 +197,7 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
     }
     mkDeco(view: EditorView) {
       const {
+        plugin,
         plugin: { settings },
       } = view.state.field(bibManagerField);
 
@@ -246,6 +247,24 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                   ?.includes('hmd-internal-link')
               ) {
                 linkText = view.state.sliceDoc(centerNode.from, centerNode.to);
+              }
+
+              // For plain [@citekey] citations, link to the literature note if
+              // the setting is on and the note actually exists (no dead links).
+              if (!linkText && settings.renderCitationsAsLinks) {
+                const filePath = obsView?.file?.path ?? '';
+                for (const seg of match) {
+                  if (seg.type === SegmentType.key) {
+                    const dest = plugin.app.metadataCache.getFirstLinkpathDest(
+                      seg.val,
+                      filePath
+                    );
+                    if (dest) {
+                      linkText = seg.val;
+                      break;
+                    }
+                  }
+                }
               }
 
               if (
