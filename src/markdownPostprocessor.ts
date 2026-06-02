@@ -113,19 +113,21 @@ export function processCiteKeys(plugin: ReferenceList) {
           }
 
           // If "link citations to literature notes" is on, make the span
-          // clickable. "Dead link" means unresolved (not in the bibliography) —
-          // resolved citations always get the link. For multi-key citations we
-          // use the first resolved key.
+          // clickable. Tries bare citekey first, then @citekey (ZotLit default
+          // naming). Only links when the note actually exists — citations with
+          // no matching note stay plain text.
           if (plugin.settings.renderCitationsAsLinks) {
             for (const cit of rendered.citations) {
-              const { isResolved } =
-                plugin.bibManager.getResolution(ctx.sourcePath, cit.id) || {};
-              if (isResolved) {
+              const dest =
+                plugin.app.metadataCache.getFirstLinkpathDest(cit.id, ctx.sourcePath) ||
+                plugin.app.metadataCache.getFirstLinkpathDest('@' + cit.id, ctx.sourcePath);
+              if (dest) {
+                const linkTarget = dest.basename;
                 span.addClass('is-link');
                 span.addEventListener('click', (evt) => {
                   const newPane = Keymap.isModEvent(evt);
                   plugin.app.workspace.openLinkText(
-                    cit.id,
+                    linkTarget,
                     ctx.sourcePath,
                     newPane
                   );

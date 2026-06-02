@@ -250,17 +250,20 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
               }
 
               // For plain [@citekey] citations, link to the literature note when
-              // the setting is on. "Dead link" means unresolved (not in the
-              // bibliography) — resolved citations always get the link, whether
-              // or not a note exists yet (clicking will open/create it).
+              // the setting is on. Tries bare citekey first, then @citekey
+              // (ZotLit default naming). Only links when the note actually exists
+              // so dead citations (no note) don't get link styling.
               if (!linkText && settings.renderCitationsAsLinks) {
+                const filePath = obsView?.file?.path ?? '';
                 for (const seg of match) {
-                  if (
-                    seg.type === SegmentType.key &&
-                    !citekeyCache?.unresolvedKeys.has(seg.val)
-                  ) {
-                    linkText = seg.val;
-                    break;
+                  if (seg.type === SegmentType.key) {
+                    const dest =
+                      plugin.app.metadataCache.getFirstLinkpathDest(seg.val, filePath) ||
+                      plugin.app.metadataCache.getFirstLinkpathDest('@' + seg.val, filePath);
+                    if (dest) {
+                      linkText = dest.basename;
+                      break;
+                    }
                   }
                 }
               }
