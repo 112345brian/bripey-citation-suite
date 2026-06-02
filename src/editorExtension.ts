@@ -249,20 +249,18 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                 linkText = view.state.sliceDoc(centerNode.from, centerNode.to);
               }
 
-              // For plain [@citekey] citations, link to the literature note if
-              // the setting is on and the note actually exists (no dead links).
+              // For plain [@citekey] citations, link to the literature note when
+              // the setting is on. "Dead link" means unresolved (not in the
+              // bibliography) — resolved citations always get the link, whether
+              // or not a note exists yet (clicking will open/create it).
               if (!linkText && settings.renderCitationsAsLinks) {
-                const filePath = obsView?.file?.path ?? '';
                 for (const seg of match) {
-                  if (seg.type === SegmentType.key) {
-                    const dest = plugin.app.metadataCache.getFirstLinkpathDest(
-                      seg.val,
-                      filePath
-                    );
-                    if (dest) {
-                      linkText = seg.val;
-                      break;
-                    }
+                  if (
+                    seg.type === SegmentType.key &&
+                    !citekeyCache?.unresolvedKeys.has(seg.val)
+                  ) {
+                    linkText = seg.val;
+                    break;
                   }
                 }
               }

@@ -113,15 +113,14 @@ export function processCiteKeys(plugin: ReferenceList) {
           }
 
           // If "link citations to literature notes" is on, make the span
-          // clickable — but only when a note actually exists for the citekey
-          // (no dead links). For multi-key citations we use the first resolved key.
+          // clickable. "Dead link" means unresolved (not in the bibliography) —
+          // resolved citations always get the link. For multi-key citations we
+          // use the first resolved key.
           if (plugin.settings.renderCitationsAsLinks) {
             for (const cit of rendered.citations) {
-              const dest = plugin.app.metadataCache.getFirstLinkpathDest(
-                cit.id,
-                ctx.sourcePath
-              );
-              if (dest) {
+              const { isResolved } =
+                plugin.bibManager.getResolution(ctx.sourcePath, cit.id) || {};
+              if (isResolved) {
                 span.addClass('is-link');
                 span.addEventListener('click', (evt) => {
                   const newPane = Keymap.isModEvent(evt);
