@@ -2,6 +2,7 @@ import { Keymap, MarkdownPostProcessorContext } from 'obsidian';
 
 import ReferenceList from './main';
 import { Segment, SegmentType, getCitationSegments } from './parser/parser';
+import { getLitNoteForCitekey } from './zotlit';
 import equal from 'fast-deep-equal';
 
 function getCiteClass(isResolved: boolean, isUnresolved: boolean) {
@@ -113,16 +114,14 @@ export function processCiteKeys(plugin: ReferenceList) {
           }
 
           // If "link citations to literature notes" is on, make the span
-          // clickable. Tries bare citekey first, then @citekey (ZotLit default
-          // naming). Only links when the note actually exists — citations with
-          // no matching note stay plain text.
+          // clickable. Uses ZotLit's noteIndex cache when available (handles
+          // any filename template), then falls back to @citekey / citekey
+          // filename guessing. Only links when a note actually exists.
           if (plugin.settings.renderCitationsAsLinks) {
             for (const cit of rendered.citations) {
-              const dest =
-                plugin.app.metadataCache.getFirstLinkpathDest(cit.id, ctx.sourcePath) ||
-                plugin.app.metadataCache.getFirstLinkpathDest('@' + cit.id, ctx.sourcePath);
-              if (dest) {
-                const linkTarget = dest.basename;
+              const result = getLitNoteForCitekey(cit.id, ctx.sourcePath, plugin.app);
+              if (result) {
+                const linkTarget = result.linkText;
                 span.addClass('is-link');
                 span.addEventListener('click', (evt) => {
                   const newPane = Keymap.isModEvent(evt);
