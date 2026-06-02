@@ -2,7 +2,6 @@ import { Keymap, MarkdownPostProcessorContext } from 'obsidian';
 
 import ReferenceList from './main';
 import { Segment, SegmentType, getCitationSegments } from './parser/parser';
-import { getLitNoteForCitekey } from './zotlit';
 import equal from 'fast-deep-equal';
 
 function getCiteClass(isResolved: boolean, isUnresolved: boolean) {
@@ -113,27 +112,15 @@ export function processCiteKeys(plugin: ReferenceList) {
             span.append(node.cloneNode());
           }
 
-          // If "link citations to literature notes" is on, make the span
-          // clickable. Uses ZotLit's noteIndex cache when available (handles
-          // any filename template), then falls back to @citekey / citekey
-          // filename guessing. Only links when a note actually exists.
-          if (plugin.settings.renderCitationsAsLinks) {
-            for (const cit of rendered.citations) {
-              const result = getLitNoteForCitekey(cit.id, ctx.sourcePath, plugin.app);
-              if (result) {
-                const linkTarget = result.linkText;
-                span.addClass('is-link');
-                span.addEventListener('click', (evt) => {
-                  const newPane = Keymap.isModEvent(evt);
-                  plugin.app.workspace.openLinkText(
-                    linkTarget,
-                    ctx.sourcePath,
-                    newPane
-                  );
-                });
-                break;
-              }
-            }
+          // If "link citations to literature notes" is on, treat the citekey
+          // as a link — no lookup needed, same as [[citekey]].
+          if (plugin.settings.renderCitationsAsLinks && rendered.citations.length) {
+            const citekey = rendered.citations[0].id;
+            span.addClass('is-link');
+            span.addEventListener('click', (evt) => {
+              const newPane = Keymap.isModEvent(evt);
+              plugin.app.workspace.openLinkText(citekey, ctx.sourcePath, newPane);
+            });
           }
 
           plugin.tooltipManager.bindPreviewTooltipHandler(span);

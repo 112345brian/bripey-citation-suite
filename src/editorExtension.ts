@@ -23,7 +23,6 @@ import {
   SegmentType,
   getCitationSegments,
 } from './parser/parser';
-import { getLitNoteForCitekey } from './zotlit';
 import { BibManager, FileCache } from './bib/bibManager';
 import equal from 'fast-deep-equal';
 import { TooltipManager } from './tooltip';
@@ -250,19 +249,13 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                 linkText = view.state.sliceDoc(centerNode.from, centerNode.to);
               }
 
-              // For plain [@citekey] citations, link to the literature note when
-              // the setting is on. Uses ZotLit's noteIndex cache when available
-              // (handles any filename template), then falls back to @citekey /
-              // citekey filename guessing.
+              // For plain [@citekey] citations, treat the citekey as a link
+              // when the setting is on — no lookup needed, same as [[citekey]].
               if (!linkText && settings.renderCitationsAsLinks) {
-                const filePath = obsView?.file?.path ?? '';
                 for (const seg of match) {
                   if (seg.type === SegmentType.key) {
-                    const result = getLitNoteForCitekey(seg.val, filePath, plugin.app);
-                    if (result) {
-                      linkText = result.linkText;
-                      break;
-                    }
+                    linkText = seg.val;
+                    break;
                   }
                 }
               }
