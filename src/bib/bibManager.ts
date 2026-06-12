@@ -19,6 +19,7 @@ import {
   PromiseCapability,
   copyElToClipboard,
   copyTextToClipboard,
+  debugLog,
 } from 'src/helpers';
 import {
   RenderedCitation,
@@ -425,7 +426,7 @@ export class BibManager {
     const pandoc = settings.pathToPandoc ?? '';
 
     // Load existing cache file once up-front.
-    let cacheMap = new Map<string, { mtime: number; size: number; pandoc: string; entries: PartialCSLEntry[] }>();
+    const cacheMap = new Map<string, { mtime: number; size: number; pandoc: string; entries: PartialCSLEntry[] }>();
     try {
       if (await app.vault.adapter.exists(BIB_CACHE_PATH)) {
         const raw = JSON.parse(await app.vault.adapter.read(BIB_CACHE_PATH));
@@ -470,7 +471,7 @@ export class BibManager {
               cached.size === stat.size &&
               cached.pandoc === pandoc) {
             bib = cached.entries;
-            console.log(`[bcs:bib] parse cache hit for "${resolved}" — ${bib.length} entries`);
+            debugLog(`[bcs:bib] parse cache hit for "${resolved}" — ${bib.length} entries`);
           }
         } catch {
           // Fall through to full parse.
@@ -480,7 +481,7 @@ export class BibManager {
       if (!bib) {
         try {
           bib = await bibToCSL(resolved, settings.pathToPandoc);
-          console.log(`[bcs:bib] parsed "${resolved}" — ${bib?.length ?? 0} entries`);
+          debugLog(`[bcs:bib] parsed "${resolved}" — ${bib?.length ?? 0} entries`);
         } catch (e) {
           console.error(`bripey-citation-suite: failed to load "${resolved}":`, e);
           continue;
@@ -525,7 +526,7 @@ export class BibManager {
     }
 
     if (settingsModified) this.plugin.saveSettings();
-    console.log('[bcs:bib] bibCache now has', this.bibCache.size, 'entries after .bib load');
+    debugLog('[bcs:bib] bibCache now has', this.bibCache.size, 'entries after .bib load');
   }
 
   getZoteroAdapter(): ZoteroAdapter {
@@ -550,19 +551,19 @@ export class BibManager {
   // appears in multiple groups. Does not build the CSL engine.
   async loadGlobalZBib(fromCache?: boolean) {
     const { settings } = this.plugin;
-    console.log('[bcs:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
+    debugLog('[bcs:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
     if (!settings.zoteroGroups?.length) {
-      console.log('[bcs:bib] no zoteroGroups configured — skipping Zotero load');
+      debugLog('[bcs:bib] no zoteroGroups configured — skipping Zotero load');
       return;
     }
 
     const adapter = this.getZoteroAdapter();
-    console.log('[bcs:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
+    debugLog('[bcs:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
     for (const group of settings.zoteroGroups) {
       try {
-        console.log('[bcs:bib] fetching group', group.id, group.name);
+        debugLog('[bcs:bib] fetching group', group.id, group.name);
         const res = await adapter.getBib('', group.id, fromCache);
-        console.log('[bcs:bib] group', group.id, 'returned', res.list?.length ?? 'null', 'entries');
+        debugLog('[bcs:bib] group', group.id, 'returned', res.list?.length ?? 'null', 'entries');
         if (!res.list?.length) continue;
 
         if (!fromCache) {
@@ -578,7 +579,7 @@ export class BibManager {
       }
     }
 
-    console.log('[bcs:bib] bibCache now has', this.bibCache.size, 'entries after Zotero load');
+    debugLog('[bcs:bib] bibCache now has', this.bibCache.size, 'entries after Zotero load');
     this.plugin.saveSettings();
   }
 
@@ -645,7 +646,7 @@ export class BibManager {
   async buildGlobalEngine() {
     const { settings } = this.plugin;
 
-    console.log('[bcs:bib] buildGlobalEngine, bibCache.size=', this.bibCache.size);
+    debugLog('[bcs:bib] buildGlobalEngine, bibCache.size=', this.bibCache.size);
     this.setFuse(Array.from(this.bibCache.values()));
 
     const style =

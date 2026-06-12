@@ -201,7 +201,6 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
     }
     mkDeco(view: EditorView) {
       const {
-        plugin,
         plugin: { settings },
       } = view.state.field(bibManagerField);
 

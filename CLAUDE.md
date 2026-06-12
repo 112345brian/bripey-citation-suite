@@ -48,11 +48,13 @@
 - [2025-05-29] `react-select` removed — minimal `SearchSelect` Preact component replaces it (~70 KB saved)
 - [2025-05-29] Pandoc made optional — `@retorquere/bibtex-parser` is the default; Pandoc accepted as opt-in
 - [2025-05-29] Multi-source merge — `.bib` + Zotero load simultaneously; Zotero wins on conflict; cross-group duplicates resolved by `dateModified`
+- [2026-06-12] npm is the package manager — `package-lock.json` committed, `yarn.lock` removed; CI (`.github/workflows/ci.yml` + `release.yml`) uses `npm ci`
+- [2026-06-12] `moduleResolution: "bundler"` — fixes `@retorquere/bibtex-parser` type resolution; `tsc --noemit` is clean and must stay clean
+- [2026-06-12] Verbose logging is gated — use `debugLog` from `src/helpers.ts` (flag `BCS_DEBUG`), never raw `console.log`
 
 ## TODO
 - [ ] Semicolons in citation suffixes still sometimes mis-parse when the suffix itself contains `@` (edge case of the lookahead fix)
 - [ ] Table cell citekey autocomplete corrupts text — `EditorSuggest` API reports wrong cursor position inside table cells; unfixable without upstream Obsidian change
-- [ ] `moduleResolution: "node"` is deprecated in TS 5.x; safe to keep, could migrate to `"bundler"`
 
 ## Tests
 - `src/parser/tests/parser.test.ts` — 60 tests: citation segments, wikilink aliases, semicolon-in-suffix

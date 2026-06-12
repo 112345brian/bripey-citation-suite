@@ -9,6 +9,12 @@ export function getVaultRoot() {
   return (app.vault.adapter as FileSystemAdapter).getBasePath();
 }
 
+// Set to true to enable verbose plugin logging (bib loading, Zotero sync).
+const BCS_DEBUG = false;
+export const debugLog: (...args: any[]) => void = BCS_DEBUG
+  ? (...args: any[]) => console.log(...args)
+  : () => {};
+
 export async function copyElToClipboard(el: HTMLElement) {
   const html = el.outerHTML;
   const text = htmlToMarkdown(html);

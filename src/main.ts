@@ -32,7 +32,7 @@ import {
 } from './settings';
 import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
-import { PromiseCapability } from './helpers';
+import { PromiseCapability, debugLog } from './helpers';
 import { isAbsolutePath } from './bib/helpers';
 import { findPandoc } from './bib/pandoc';
 import { BibManager, getScopedSettings } from './bib/bibManager';
@@ -153,7 +153,7 @@ export default class ReferenceList extends Plugin {
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
 
-    console.log('[bcs:main] loaded settings:', JSON.stringify({
+    debugLog('[bcs:main] loaded settings:', JSON.stringify({
       bibliographyPaths: this.settings.bibliographyPaths,
       pullFromZotero: this.settings.pullFromZotero,
       zoteroGroups: this.settings.zoteroGroups,
@@ -165,25 +165,25 @@ export default class ReferenceList extends Plugin {
     this.initPromise.promise
       .then(async () => {
         const { settings, bibManager } = this;
-        console.log('[bcs:main] initPromise.then fired — starting bib load');
+        debugLog('[bcs:main] initPromise.then fired — starting bib load');
         // Load sources in priority order: .bib first (lower priority),
         // Zotero on top (higher priority, wins on conflicts).
         if (settings.bibliographyPaths?.length) {
           await bibManager.loadGlobalBibFiles();
         } else {
-          console.log('[bcs:main] no bibliographyPaths set, skipping .bib load');
+          debugLog('[bcs:main] no bibliographyPaths set, skipping .bib load');
         }
         if (settings.pullFromZotero) {
           await bibManager.loadAndRefreshGlobalZBib();
         } else {
-          console.log('[bcs:main] pullFromZotero not set, skipping Zotero load');
+          debugLog('[bcs:main] pullFromZotero not set, skipping Zotero load');
         }
         // Build the Fuse index now so @ autocomplete is available immediately,
         // before the (slower) CSL engine compilation below.
         bibManager.buildFuseIndex();
         // Build the CSL engine once, after all sources are merged.
         await bibManager.buildGlobalEngine();
-        console.log('[bcs:main] bib load complete, bibManager.initPromise resolving');
+        debugLog('[bcs:main] bib load complete, bibManager.initPromise resolving');
         // Incremental Zotero refresh runs async after the engine is ready.
         if (settings.pullFromZotero) {
           bibManager.refreshGlobalZBib().catch(console.error);

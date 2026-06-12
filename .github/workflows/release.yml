@@ -16,7 +16,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci && npm run build
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -24,4 +26,4 @@ jobs:
             main.js
             manifest.json
             styles.css
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
