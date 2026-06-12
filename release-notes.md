@@ -1,3 +1,51 @@
+## 2.5.10
+
+- **Fix: citation links now work in live preview and reading mode.** In live preview, CodeMirror removes the rendered widget from the DOM synchronously on `mousedown` — before `click` fires — so click handlers on widgets never executed. Fixed by switching to `mousedown`. In reading mode, replaced the JavaScript `addEventListener` approach with a native `<a class="internal-link" data-href>` wrapper so Obsidian's own reading-mode link handler fires, the same mechanism as `[[wikilinks]]`. Added CSS to allow pointer-events on the `<a>` inside `.pandoc-citation.is-link`. `Ctrl/Cmd+click` opens in a new pane in both modes.
+
+## 2.5.9 – 2.5.5
+
+- **Intermediate fixes for citation link routing.** Several iterations narrowing down the correct link target: bare citekey → `@citekey` (ZotLit names literature notes `@citekey.md`); removed a note-existence pre-check that was blocking all clicks; settled on `openLinkText('@' + citekey)` with no lookup, matching how ZotLit names notes by default. Superseded by the 2.5.10 fix.
+
+## 2.5.4
+
+- **New: "Link citations to literature notes" toggle.** When enabled, rendered `[@citekey]` citations become clickable links that open their matching literature note — same behaviour as `[[@wikilink]]` citations. Ctrl/Cmd+click opens in a new pane. Requires ZotLit (or a note named `@citekey`) to have a target to land on; citations with no matching note are not linked.
+
+## 2.5.3
+
+- **Fix: reference panel no longer reopens on every Obsidian start.** After manually closing the sidebar panel, it was re-opened unconditionally on the next load because `onLayoutReady` called `initLeaf()` without checking whether a leaf already existed. Added a `panelAutoOpened` flag — the panel only auto-opens on first install (desktop) or always on mobile where workspace state isn't persisted. Also fixed a race where `initLeaf` used an `instanceof` check that returned null while the workspace was still restoring a leaf, causing a duplicate "References" tab to appear on every plugin reload. Guard now uses `getLeavesOfType().length` instead.
+
+## 2.5.2
+
+- **Fix: settings panel showed "undefined" for new locale keys** added in 2.5.0 that weren't registered in `en.ts`. All missing strings added. Also fixed a `loadGlobalBibFiles` typo, added `AbstractInputSuggest` type declaration, and extended `PartialCSLEntry` to include author/editor fields.
+
+## 2.5.1
+
+- Patch release — version bookkeeping and manifest corrections following 2.5.0.
+
+## 2.5.0
+
+- **New: bibliography snapshot.** A "Save bibliography snapshot" command (also available as a camera button in the reference panel) serialises all citations in the current note — including Zotero entries — as a `.bib` file and wires the path into the note's `bibliography` frontmatter key automatically. Useful for archiving a project's sources alongside the note.
+- **New: global-only citation highlighting.** When a note has a local bibliography in its frontmatter, citations that exist in the global library (Zotero / other `.bib` files) but are absent from the local snapshot now render in amber with a dashed underline (`is-global-only`). The reference panel header shows an orange count badge for these. Citations missing everywhere remain red.
+
+## 2.4.0
+
+- **Multiple bibliography files.** `bibliographyPaths` (string array) replaces the single `pathToBibliography` setting. The settings UI shows a list with add/remove/browse per entry. Existing single-path settings are auto-migrated on first load. The parse cache handles multiple files: one `.pandoc/bib-parsed.json` stores per-path entries and only re-parses files whose mtime/size has changed.
+- **Smart `⌘↵` bracket insertion.** Pressing `Cmd/Ctrl+Enter` in the autocomplete detects bracket context: `[@del` → `[@citekey]`, `[@k1; @del]` → `[@k1; @citekey]`, bare `@del` → `[@citekey]`. Never double-wraps existing brackets.
+- **Diacritic-insensitive search.** NFD normalisation applied to both the Fuse index and the query, so "Muller" matches "Müller" and "Cezanne" matches "Cézanne".
+
+## 2.3.0
+
+- **`@@` full-text search.** Typing `@@` triggers a full-text title/author/year search via ZotLit's database (when available), falling back to a title-biased Fuse search over the local bibliography. Single `@` continues to do citekey-prefix search as before.
+- **Fix: autocomplete blocked by other `@`-triggered suggesters.** When multiple plugins respond to `@`, Obsidian's internal EditorSuggest queue determined which one won. Citation suggestions were silently dropped when another plugin (e.g. `pandoc-extended-markdown`) sat earlier in the queue and consumed the trigger. A new "Prioritize citation completion" toggle (default on) moves CiteSuggest to the front of the queue on load.
+
+## 2.2.4
+
+- **Fix: citation autocomplete blocked by other `@`-triggered plugins.** Same root cause as fixed more fully in 2.3.0 — this patch added the "Prioritize citation completion" toggle as a standalone fix before the `@@` search work landed.
+
+## 2.2.3
+
+- Minor autocomplete cleanup — reduced `onTrigger` noise from the debug builds shipped in 2.2.1 / 2.2.2.
+
 ## 2.2.2
 
 - **Debug: added unconditional `onTrigger` probe.** Now logs any time the line contains `@`, regardless of regex match — tells us definitively whether `onTrigger` is being called at all vs. the regex failing to match.
