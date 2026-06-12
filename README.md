@@ -2,8 +2,6 @@
 
 A citation management plugin for Obsidian. Displays a formatted reference sidebar for every Pandoc citekey in the current document, with live-preview and reading-mode rendering, citekey autocomplete, and Zotero sync.
 
-<img src="https://raw.githubusercontent.com/mgmeyers/obsidian-pandoc-reference-list/main/Screen%20Shot.png" alt="A screenshot of the plugin's works cited list">
-
 ## Features
 
 - **Formatted reference sidebar** — live list of all citations in the current note, filterable, with copy and jump-to buttons
