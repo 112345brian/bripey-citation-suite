@@ -26,6 +26,7 @@ import {
 import { BibManager, FileCache } from './bib/bibManager';
 import equal from 'fast-deep-equal';
 import { TooltipManager } from './tooltip';
+import { getLitNoteForCitekey } from './zotlit';
 
 const ignoreListRegEx = /code|math|templater|hashtag/;
 
@@ -252,12 +253,19 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                 linkText = view.state.sliceDoc(centerNode.from, centerNode.to);
               }
 
-              // For plain [@citekey] citations, treat the citekey as a link
-              // when the setting is on — no lookup needed, same as [[citekey]].
+              // For plain [@citekey] citations, resolve the literature note when
+              // the setting is on. getLitNoteForCitekey checks ZotLit's
+              // frontmatter index first (catches renamed notes), then falls back
+              // to the @citekey filename convention.
               if (!linkText && settings.renderCitationsAsLinks) {
                 for (const seg of match) {
                   if (seg.type === SegmentType.key) {
-                    linkText = '@' + seg.val;
+                    const resolved = getLitNoteForCitekey(
+                      seg.val,
+                      obsView?.file?.path ?? '',
+                      app
+                    );
+                    linkText = resolved?.linkText ?? '@' + seg.val;
                     break;
                   }
                 }

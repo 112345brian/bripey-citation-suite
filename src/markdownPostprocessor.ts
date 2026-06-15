@@ -3,6 +3,7 @@ import { MarkdownPostProcessorContext } from 'obsidian';
 import ReferenceList from './main';
 import { Segment, SegmentType, getCitationSegments } from './parser/parser';
 import equal from 'fast-deep-equal';
+import { getLitNoteForCitekey } from './zotlit';
 
 function getCiteClass(isResolved: boolean, isUnresolved: boolean) {
   const cls = ['pandoc-citation'];
@@ -116,7 +117,9 @@ export function processCiteKeys(plugin: ReferenceList) {
           // an <a class="internal-link"> so Obsidian's own reading-mode click
           // handler navigates to the note (same mechanism as [[wikilinks]]).
           if (plugin.settings.renderCitationsAsLinks && rendered.citations.length) {
-            const linkTarget = '@' + rendered.citations[0].id;
+            const citekey = rendered.citations[0].id;
+            const resolved = getLitNoteForCitekey(citekey, ctx.sourcePath, plugin.app);
+            const linkTarget = resolved?.linkText ?? '@' + citekey;
             span.addClass('is-link');
             const a = span.createEl('a', {
               cls: 'internal-link',
