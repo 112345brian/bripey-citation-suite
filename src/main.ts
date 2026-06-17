@@ -22,6 +22,7 @@ import {
   bibManagerField,
   editorTooltipHandler,
 } from './editorExtension';
+import { API_VERSION, BripeyCitationSuiteApi } from './api';
 import { cslToBibTeX } from './bib/bibtexSerializer';
 import { t } from './lang/helpers';
 import { processCiteKeys } from './markdownPostprocessor';
@@ -124,6 +125,7 @@ function updateBibliographyPath(
 }
 
 export default class ReferenceList extends Plugin {
+  api: BripeyCitationSuiteApi;
   settings: ReferenceListSettings;
   emitter: Events;
   tooltipManager: TooltipManager;
@@ -152,6 +154,11 @@ export default class ReferenceList extends Plugin {
 
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
+    this.api = {
+      version: API_VERSION,
+      focusReferenceListView: () => this.initLeaf(),
+      getCitekeysForFile: (file?: TFile) => this.getCitekeysForFile(file),
+    };
 
     debugLog('[bcs:main] loaded settings:', JSON.stringify({
       bibliographyPaths: this.settings.bibliographyPaths,
@@ -532,6 +539,23 @@ export default class ReferenceList extends Plugin {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (!leaves?.length) return;
     this.app.workspace.revealLeaf(leaves[0]);
+  }
+
+  async getCitekeysForFile(file?: TFile) {
+    const target = file ?? this.app.workspace.getActiveFile();
+    if (!target) return [];
+
+    const cached = this.bibManager.fileCache.get(target);
+    if (cached?.keys) return Array.from(cached.keys);
+
+    try {
+      const content = await this.app.vault.cachedRead(target);
+      await this.bibManager.getReferenceList(target, content);
+      return Array.from(this.bibManager.fileCache.get(target)?.keys ?? []);
+    } catch (error) {
+      console.error('Bripey Citation Suite: failed to read citekeys for API consumer', error);
+      return [];
+    }
   }
 
   async loadSettings() {

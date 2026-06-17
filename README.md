@@ -29,6 +29,18 @@ A citation management plugin for Obsidian. Displays a formatted reference sideba
 - [Zotero integration](docs/zotero.md) — native API, Better BibTeX, library selection, multi-source merge
 - [Mobile](docs/mobile.md) — tap/long-press behaviour, file picker, limitations
 
+## Plugin API
+
+Other plugins can use the public API instead of commands or internal fields:
+
+```ts
+const plugin = app.plugins.plugins["bripey-citation-suite"] as { api?: BripeyCitationSuiteApi } | undefined;
+if (plugin?.api?.version === 1) {
+  await plugin.api.focusReferenceListView();
+  const citekeys = await plugin.api.getCitekeysForFile(app.workspace.getActiveFile() ?? undefined);
+}
+```
+
 ## Changelog
 
 See [release-notes.md](release-notes.md) for a full version history.

@@ -1,3 +1,8 @@
+## 2.5.12
+
+- **Plugin API:** added `api.version`, `api.focusReferenceListView()`, and `api.getCitekeysForFile(file?)` so companion plugins can open the references panel and detect note citekeys without calling commands or reading internal fields.
+- **Version bookkeeping:** aligned `package.json`, `manifest.json`, and `versions.json` on `2.5.12`.
+
 ## 2.5.10
 
 - **Fix: citation links now work in live preview and reading mode.** In live preview, CodeMirror removes the rendered widget from the DOM synchronously on `mousedown` — before `click` fires — so click handlers on widgets never executed. Fixed by switching to `mousedown`. In reading mode, replaced the JavaScript `addEventListener` approach with a native `<a class="internal-link" data-href>` wrapper so Obsidian's own reading-mode link handler fires, the same mechanism as `[[wikilinks]]`. Added CSS to allow pointer-events on the `<a>` inside `.pandoc-citation.is-link`. `Ctrl/Cmd+click` opens in a new pane in both modes.
