@@ -1,4 +1,4 @@
-import { AbstractInputSuggest, TFolder } from 'obsidian';
+import { AbstractInputSuggest, App, TFolder } from 'obsidian';
 
 /**
  * Attaches a folder-autocomplete dropdown to any HTMLInputElement.
@@ -10,6 +10,10 @@ import { AbstractInputSuggest, TFolder } from 'obsidian';
  * input and fires an `input` event so any `.onChange()` handler picks it up.
  */
 export class FolderSuggest extends AbstractInputSuggest<TFolder> {
+  constructor(app: App, private readonly inputEl: HTMLInputElement) {
+    super(app, inputEl);
+  }
+
   getSuggestions(query: string): TFolder[] {
     const q = query.toLowerCase().trim();
     const folders: TFolder[] = [];

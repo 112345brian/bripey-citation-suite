@@ -1,4 +1,4 @@
-import { AbstractInputSuggest, TFile } from 'obsidian';
+import { AbstractInputSuggest, App, TFile } from 'obsidian';
 
 const BIB_EXTENSIONS = new Set(['bib', 'json', 'yaml', 'yml']);
 
@@ -11,6 +11,10 @@ const BIB_EXTENSIONS = new Set(['bib', 'json', 'yaml', 'yml']);
  *   new BibFileSuggest(app, text.inputEl);
  */
 export class BibFileSuggest extends AbstractInputSuggest<TFile> {
+  constructor(app: App, private readonly inputEl: HTMLInputElement) {
+    super(app, inputEl);
+  }
+
   getSuggestions(query: string): TFile[] {
     const q = query.toLowerCase().trim();
     return app.vault

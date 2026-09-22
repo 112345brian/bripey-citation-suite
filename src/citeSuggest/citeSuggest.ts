@@ -53,14 +53,12 @@ const DOUBLE_AT_PREFIX = '\x00';
 
 export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>> {
   private plugin: ReferenceList;
-  private app: App;
 
   limit = 20;
 
   constructor(app: App, plugin: ReferenceList) {
     super(app);
 
-    this.app = app;
     this.plugin = plugin;
 
     (this as any).suggestEl.addClass('bcs-suggest');
